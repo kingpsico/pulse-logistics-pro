@@ -1,24 +1,196 @@
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { Factory, Layers, Plus, Target } from "lucide-react";
+import { Toaster } from "@/components/ui/sonner";
+import { Button } from "@/components/ui/button";
+import { TopBar } from "@/components/canepulse/TopBar";
+import { UnitPanel } from "@/components/canepulse/UnitPanel";
+import { UnitAnalytics } from "@/components/canepulse/UnitAnalytics";
+import { ReportsPanel } from "@/components/canepulse/ReportsPanel";
+import type { Unit } from "@/lib/canepulse";
+import { computeUnitMetrics, emptyUnit, fmt } from "@/lib/canepulse";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
-  component: Index,
+  head: () => ({
+    meta: [
+      { title: "CanePulse — Logística Canavieira e Otimização de Moagem" },
+      {
+        name: "description",
+        content:
+          "Painel enterprise para gestão de frentes de trabalho, leitura de planilhas por Vision AI e projeção de moagem em tempo real.",
+      },
+      { property: "og:title", content: "CanePulse — Otimização de Moagem" },
+      {
+        property: "og:description",
+        content:
+          "Monitore potencial vs entrega real das frentes, ritmo de moagem (t/h) e fechamento projetado de 24h.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
+  component: CanePulse,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+const STORAGE_KEY = "canepulse:state:v1";
+
+function CanePulse() {
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      setUnits(raw ? (JSON.parse(raw) as Unit[]) : [emptyUnit(0)]);
+    } catch {
+      setUnits([emptyUnit(0)]);
+    }
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (hydrated) localStorage.setItem(STORAGE_KEY, JSON.stringify(units));
+  }, [units, hydrated]);
+
+  const patchUnit = (id: string, patch: Partial<Unit>) =>
+    setUnits((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
+
+  const justify = (unitId: string, frontId: string, text: string) =>
+    setUnits((prev) =>
+      prev.map((u) =>
+        u.id === unitId
+          ? {
+              ...u,
+              fronts: u.fronts.map((f) => (f.id === frontId ? { ...f, justification: text } : f)),
+            }
+          : u,
+      ),
+    );
+
+  const groupTarget = useMemo(
+    () => units.reduce((sum, u) => sum + (u.dailyTarget || 0), 0),
+    [units],
+  );
+  const groupFronts = useMemo(() => units.reduce((s, u) => s + u.fronts.length, 0), [units]);
+  const groupProjection = useMemo(
+    () => units.reduce((s, u) => s + computeUnitMetrics(u).projection24, 0),
+    [units],
+  );
+
+  return (
+    <div className="min-h-screen">
+      <TopBar />
+      <Toaster />
+
+      <main className="mx-auto max-w-[1600px] px-5 pb-20 pt-8">
+        <section>
+          <p className="text-[11px] uppercase tracking-[0.22em] text-primary">Etapa 1 · Setup</p>
+          <h1 className="mt-1 font-display text-2xl font-semibold">
+            Controle operacional de <span className="text-gradient-primary">moagem e logística</span>
+          </h1>
+          <p className="mt-1.5 max-w-2xl text-sm text-muted-foreground">
+            Configure até 7 unidades industriais com até 8 frentes cada, importe a planilha horária e
+            acompanhe o fechamento projetado do dia.
+          </p>
+
+          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+            <SummaryCard
+              icon={<Target className="h-4 w-4" />}
+              label="Meta Global do Grupo (t/dia)"
+              value={fmt(groupTarget)}
+              highlight
+            />
+            <SummaryCard
+              icon={<Factory className="h-4 w-4" />}
+              label="Unidades ativas"
+              value={`${units.length}/7`}
+            />
+            <SummaryCard
+              icon={<Layers className="h-4 w-4" />}
+              label="Projeção 24h do grupo (t)"
+              value={fmt(groupProjection)}
+              hint={`${groupFronts} frentes cadastradas`}
+            />
+          </div>
+        </section>
+
+        <section className="mt-10 space-y-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-[11px] uppercase tracking-[0.22em] text-primary">
+              Etapa 2 · Abastecimento &amp; Vision AI
+            </p>
+            <Button
+              className="ml-auto"
+              disabled={units.length >= 7}
+              onClick={() => setUnits((prev) => [...prev, emptyUnit(prev.length)])}
+            >
+              <Plus className="h-4 w-4" /> Adicionar Unidade
+            </Button>
+          </div>
+
+          {units.map((unit, index) => (
+            <UnitPanel
+              key={unit.id}
+              unit={unit}
+              index={index}
+              onChange={(patch) => patchUnit(unit.id, patch)}
+              onRemove={() => setUnits((prev) => prev.filter((u) => u.id !== unit.id))}
+            />
+          ))}
+        </section>
+
+        <section className="mt-12 space-y-8">
+          <p className="text-[11px] uppercase tracking-[0.22em] text-primary">
+            Etapa 3 · Motor analítico
+          </p>
+          {units.map((unit) => (
+            <div key={unit.id} className="space-y-4">
+              <h2 className="font-display text-lg font-semibold">{unit.name}</h2>
+              <UnitAnalytics
+                unit={unit}
+                metrics={computeUnitMetrics(unit)}
+                onJustify={(frontId, text) => justify(unit.id, frontId, text)}
+              />
+            </div>
+          ))}
+        </section>
+
+        <section className="mt-12">
+          <p className="mb-4 text-[11px] uppercase tracking-[0.22em] text-primary">
+            Etapa 4 · Relatórios
+          </p>
+          <ReportsPanel units={units} />
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function SummaryCard({
+  icon,
+  label,
+  value,
+  hint,
+  highlight,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  hint?: string;
+  highlight?: boolean;
+}) {
   return (
     <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
+      className={`surface-panel rounded-xl border p-5 ${
+        highlight ? "border-primary/40" : "border-border/70"
+      }`}
     >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
+        <span className="text-primary">{icon}</span>
+        {label}
+      </div>
+      <p className="num mt-2 font-display text-3xl font-semibold">{value}</p>
+      {hint ? <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
