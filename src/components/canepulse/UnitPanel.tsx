@@ -36,10 +36,18 @@ export function UnitPanel({ unit, index, onChange, onRemove }: Props) {
   const [frontPotential, setFrontPotential] = useState("");
 
   const addFront = () => {
-    if (!frontNumber.trim()) return toast.error("Informe o número da frente.");
-    if (unit.fronts.length >= 8) return toast.error("Limite de 8 frentes por unidade.");
-    if (unit.fronts.some((f) => f.number === frontNumber.trim()))
-      return toast.error("Frente já cadastrada.");
+    if (!frontNumber.trim()) {
+      toast.error("Informe o número da frente.");
+      return;
+    }
+    if (unit.fronts.length >= 8) {
+      toast.error("Limite de 8 frentes por unidade.");
+      return;
+    }
+    if (unit.fronts.some((f) => f.number === frontNumber.trim())) {
+      toast.error("Frente já cadastrada.");
+      return;
+    }
     onChange({
       fronts: [
         ...unit.fronts,
