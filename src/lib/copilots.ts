@@ -141,9 +141,10 @@ export function runEngineerCopilot(units: Unit[]): DevCritique[] {
   const metrics = units.map((u) => computeUnitMetrics(u));
   const totalFronts = units.reduce((s, u) => s + u.fronts.length, 0);
   const totalHours = units.reduce((s, u) => s + u.hours.length, 0);
-  const missingJust = units.flatMap((u, i) =>
-    metrics[i].fronts.filter((f) => f.delta < 0 && !f.front.justification && !f.autoJustification),
+  const missingJust = metrics.flatMap((m) =>
+    m.fronts.filter((f) => f.delta < 0 && !f.front.justification && !f.autoJustification),
   ).length;
+
   const noDensity = units.filter((u) => !u.density).length;
   const noTarget = units.filter((u) => !u.dailyTarget).length;
 
