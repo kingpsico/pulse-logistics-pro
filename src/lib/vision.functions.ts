@@ -8,12 +8,14 @@ const InputSchema = z.object({
 
 const PARSE_PROMPT = `You are an OCR engine for sugarcane logistics spreadsheets.
 The image is a matrix: rows or columns are HOURS, and the other axis are WORK FRONT numbers (e.g. 86, 91, 9002).
-Each cell contains the number of trucks (conjuntos) dispatched by that front in that hour.
+Each cell contains either the number of trucks (conjuntos) dispatched by that front in that hour, or an operational
+code (siglas) such as CH, FC, MC, MCJ, MT, MP, MF, MCC, TT, DM, EN, IUP, IMR, FCJ, CDC, MDB, TDT, AGP, SO, MET, APE, FDV, ADE, CBV.
 Return STRICT JSON only, no markdown, with this shape:
-{"hours":[{"hour":"06:00","counts":{"86":4,"91":3}}]}
+{"hours":[{"hour":"06:00","counts":{"86":4,"91":"CH"}}]}
 Rules:
 - "hour" must be a readable label taken from the sheet (keep the original label).
 - counts keys must be the front numbers exactly as printed (digits only).
+- Cell values are either a number (may be decimal) or the literal code string exactly as printed.
 - Empty or dash cells are 0.
 - Do not invent hours or fronts that are not visible.`;
 
@@ -74,7 +76,7 @@ export const parseSpreadsheetImage = createServerFn({ method: "POST" })
           hours: z.array(
             z.object({
               hour: z.string(),
-              counts: z.record(z.string(), z.coerce.number()),
+              counts: z.record(z.string(), z.union([z.number(), z.string()])),
             }),
           ),
         })
