@@ -119,7 +119,10 @@ export function UnitAnalytics({ unit, metrics, onJustify }: Props) {
         />
       </div>
 
+      <HourlyRhythmChart unit={unit} metrics={metrics} />
+
       <div className="grid gap-4 lg:grid-cols-2">
+
         <Panel title="Potencial vs Real — Período" icon={<TrendingUp className="h-4 w-4" />}>
           <div className="grid grid-cols-2 gap-4">
             <Stat label="Potencial (conj.)" value={fmt(metrics.potentialTrucks, 1)} />
