@@ -101,8 +101,82 @@ export function runSuplyDmgAudit(units: Unit[]): AuditItem[] {
       });
   });
 
+  items.unshift(...rainModeAudit(units));
+  items.push(...reallocationPlan(units));
+
   return items;
 }
+
+const CLIMATE_CODES = new Set(["CH", "CDC", "EN"]);
+
+/** Modo Chuva: acumula perda climática (CH/CDC/EN) por unidade e frente. */
+function rainModeAudit(units: Unit[]): AuditItem[] {
+  const rows = units
+    .map((unit) => {
+      const m = computeUnitMetrics(unit);
+      const hits = m.fronts.flatMap((f) =>
+        f.codes
+          .filter((c) => CLIMATE_CODES.has(c.code))
+          .map((c) => ({
+            front: f.front.number,
+            code: c.code,
+            hours: c.hours.length,
+            tonnes: (f.front.potential || 0) * c.hours.length * (unit.density || 0),
+          })),
+      );
+      const tonnes = hits.reduce((s, h) => s + h.tonnes, 0);
+      const hours = hits.reduce((s, h) => s + h.hours, 0);
+      return { unit, tonnes, hours, hits };
+    })
+    .filter((r) => r.hits.length > 0);
+
+  if (rows.length === 0) return [];
+
+  const total = rows.reduce((s, r) => s + r.tonnes, 0);
+  return [
+    {
+      severity: total > 0 ? "critical" : "info",
+      title: `🌧️ Modo Chuva ativo: ${fmt(total)} t acumuladas de perda climática`,
+      detail: rows
+        .map(
+          (r) =>
+            `${r.unit.name}: ${fmt(r.tonnes)} t em ${r.hours}h paradas — ${r.hits
+              .map((h) => `F${h.front} ${h.code} (${h.hours}h)`)
+              .join(", ")}`,
+        )
+        .join(" · "),
+      action:
+        "Congele cobrança de aderência nas horas climáticas, migre conjuntos para blocos de solo drenado e recomponha a perda com horas extras em janela seca — cada hora de chuva vale a perda listada acima.",
+    },
+  ];
+}
+
+/** Prescrição de realocação imediata de ativos entre frentes com base no desvio ativo. */
+function reallocationPlan(units: Unit[]): AuditItem[] {
+  return units.flatMap((unit) => {
+    const m = computeUnitMetrics(unit);
+    if (!m.hasData) return [];
+    const worst = [...m.fronts].sort((a, b) => a.compliance - b.compliance)[0];
+    const best = [...m.fronts].sort((a, b) => b.compliance - a.compliance)[0];
+    if (!worst || !best || worst.front.id === best.front.id) return [];
+    const movable = Math.max(1, Math.round((best.compliance - 100) / 25));
+    return [
+      {
+        severity: worst.compliance < 90 ? "risk" : "info",
+        title: `🔁 ${unit.name}: realocar ${movable} conjunto(s) da frente ${best.front.number} → ${worst.front.number}`,
+        detail: `Frente ${best.front.number} opera a ${fmt(best.compliance, 1)}% (folga) enquanto ${worst.front.number} está a ${fmt(
+          worst.compliance,
+          1,
+        )}% com ${fmt(worst.lostTonnes)} t perdidas. Pátio disponível: ${fmt(unit.initialStock)} conj.`,
+        action: `Mova ${movable} conjunto(s) no próximo fechamento de hora e revalide o ritmo: ganho estimado de ${fmt(
+          movable * (unit.density || 0),
+          1,
+        )} t/h.`,
+      },
+    ];
+  });
+}
+
 
 function actionForCode(code: string, front: string): string {
   const map: Record<string, string> = {
