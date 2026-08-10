@@ -16,17 +16,17 @@ import { computeUnitMetrics, emptyUnit, fmt } from "@/lib/canepulse";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "CanePulse — Logística Canavieira e Otimização de Moagem" },
+      { title: "CanePulse — Diogo Mendes | Análise Logística" },
       {
         name: "description",
         content:
-          "Painel enterprise para gestão de frentes de trabalho, leitura de planilhas por Vision AI e projeção de moagem em tempo real.",
+          "Painel executivo e motor analítico para gestão de frentes de trabalho de CTT, leitura de planilhas por Vision AI e predição de moagem em tempo real.",
       },
-      { property: "og:title", content: "CanePulse — Otimização de Moagem" },
+      { property: "og:title", content: "CanePulse — Diogo Mendes | Análise Logística" },
       {
         property: "og:description",
         content:
-          "Monitore potencial vs entrega real das frentes, ritmo de moagem (t/h) e fechamento projetado de 24h.",
+          "Painel executivo e motor analítico para gestão de frentes de trabalho de CTT, leitura de planilhas por Vision AI e predição de moagem em tempo real.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
