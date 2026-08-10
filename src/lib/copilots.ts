@@ -256,12 +256,43 @@ export function runEngineerCopilot(units: Unit[]): DevCritique[] {
   });
 
   out.push({
-    title: "OCR sem etapa de conferência humana",
+    title: "Tema visual sem variação de densidade para telas de campo",
     critique:
-      "A leitura Vision grava direto no estado sem diff nem confiança por célula. Um erro de OCR contamina silenciosamente perda, aderência e projeção de 24h.",
-    prompt:
-      "Implemente no CanePulse uma tela de revisão pós-OCR: mostre a matriz extraída em grid editável com destaque para células de baixa confiança e frentes não cadastradas, exigindo confirmação explícita antes de fundir os dados ao estado da unidade.",
+      "O tema atual é único: em tablet sob sol o contraste cai e as tabelas ficam apertadas. Não existe modo alto-contraste nem densidade compacta/confortável.",
+    prompt: [
+      "**Atualizar tema do CanePulse**",
+      "- Adicione em `src/styles.css` uma variação de tema `[data-contrast='high']` elevando `--foreground`, `--border` e `--primary`.",
+      "- Crie um toggle no TopBar: `Padrão | Alto Contraste` e persista em localStorage.",
+      "- Adicione densidade `compacta/confortável` controlando padding das tabelas via classe utilitária.",
+      "- Use somente tokens semânticos, sem cores hardcoded.",
+    ].join("\n"),
   });
+
+  out.push({
+    title: "Componentes de botão sem hierarquia operacional",
+    critique:
+      "Ações críticas (fundir OCR, exportar relatório) usam a mesma variante de botões secundários — o operador não distingue o que é irreversível.",
+    prompt: [
+      "**Atualizar componentes de botão do CanePulse**",
+      "- Em `src/components/ui/button.tsx` adicione variantes `critical`, `confirm` e `ghostWarning` via `cva`, usando tokens `destructive`, `success` e `warning`.",
+      "- Aplique `confirm` no botão '✅ Confirmar e Fundir Dados' e `critical` em remoções.",
+      "- Inclua estado `loading` com spinner e `aria-busy`.",
+    ].join("\n"),
+  });
+
+  out.push({
+    title: "Parâmetros operacionais fixos no código",
+    critique:
+      "Limites de 7 usinas, 8 frentes, janela de 24h e thresholds de aderência (90%/100%) estão espalhados como números mágicos, impedindo calibração por grupo.",
+    prompt: [
+      "**Parametrizar o CanePulse**",
+      "- Crie `src/lib/config.ts` com `MAX_UNITS`, `MAX_FRONTS`, `DAY_HOURS`, `COMPLIANCE_RISK`, `COMPLIANCE_OK`.",
+      "- Substitua todos os números mágicos por essas constantes.",
+      "- Exponha os thresholds em um card 'Parâmetros do Grupo' na aba Setup, persistindo em localStorage.",
+    ].join("\n"),
+  });
+
+
 
   return out;
 }
