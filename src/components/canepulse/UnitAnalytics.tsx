@@ -17,6 +17,7 @@ import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import type { Unit, UnitMetrics } from "@/lib/canepulse";
 import { fmt, signed, siglaLabel, statusOf } from "@/lib/canepulse";
+import { HourlyRhythmChart } from "./HourlyRhythmChart";
 
 type Props = {
   unit: Unit;
