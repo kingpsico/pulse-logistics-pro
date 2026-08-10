@@ -35,10 +35,12 @@ export const Route = createFileRoute("/")({
 
 const STORAGE_KEY = "canepulse:state:v1";
 const TAB_KEY = "canepulse:tab:v1";
+const AUTH_KEY = "canepulse:admin:v1";
 
 function CanePulse() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [tab, setTab] = useState("setup");
+  const [adminAuthed, setAdminAuthed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -48,6 +50,7 @@ function CanePulse() {
       setUnits(parsed.map((u) => ({ ...emptyUnit(0), ...u })));
       const savedTab = localStorage.getItem(TAB_KEY);
       if (savedTab) setTab(savedTab);
+      setAdminAuthed(localStorage.getItem(AUTH_KEY) === "1");
     } catch {
       setUnits([emptyUnit(0)]);
     }
@@ -61,6 +64,11 @@ function CanePulse() {
   useEffect(() => {
     if (hydrated) localStorage.setItem(TAB_KEY, tab);
   }, [tab, hydrated]);
+
+  useEffect(() => {
+    if (hydrated) localStorage.setItem(AUTH_KEY, adminAuthed ? "1" : "0");
+  }, [adminAuthed, hydrated]);
+
 
   const patchUnit = (id: string, patch: Partial<Unit>) =>
     setUnits((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
