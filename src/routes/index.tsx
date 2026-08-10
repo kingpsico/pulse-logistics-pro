@@ -111,7 +111,9 @@ function CanePulse() {
             <TabsTrigger value="feed">Abastecimento e Visão</TabsTrigger>
             <TabsTrigger value="analytics">Motor Analítico</TabsTrigger>
             <TabsTrigger value="reports">Relatório</TabsTrigger>
+            <TabsTrigger value="admin">🔒 Central Suprema Admin</TabsTrigger>
           </TabsList>
+
 
           <TabsContent value="setup" className="mt-8">
             <h1 className="font-display text-2xl font-semibold">
