@@ -205,6 +205,11 @@ function CanePulse() {
           <TabsContent value="reports" className="mt-8">
             <ReportsPanel units={units} />
           </TabsContent>
+
+          <TabsContent value="admin" className="mt-8">
+            <AdminCentral units={units} authed={adminAuthed} onAuthChange={setAdminAuthed} />
+          </TabsContent>
+
         </Tabs>
       </main>
     </div>
