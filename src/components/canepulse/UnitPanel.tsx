@@ -294,6 +294,25 @@ export function UnitPanel({ unit, index, onChange, onRemove }: Props) {
             }}
           />
 
+          {unit.pendingImport ? (
+            <OcrReview
+              unit={unit}
+              pending={unit.pendingImport}
+              onCancel={() => onChange({ pendingImport: null })}
+              onConfirm={(hours, ignoredFronts) => {
+                onChange({
+                  hours,
+                  ignoredFronts,
+                  lastImport: new Date().toLocaleString("pt-BR"),
+                  pendingImport: null,
+                });
+                toast.success(`${hours.length} hora(s) fundida(s) em ${unit.name}.`);
+              }}
+            />
+          ) : null}
+
+
+
           {unit.ignoredFronts.length > 0 ? (
             <p className="mt-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
               <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
