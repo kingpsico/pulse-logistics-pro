@@ -78,7 +78,20 @@ export function readCell(raw: unknown): { value: number; code?: string } {
   return upper ? { value: 0, code: upper } : { value: 0 };
 }
 
+/** Review heuristic: classifies a raw OCR cell for the post-OCR verification grid. */
+export function cellStatus(raw: string): "number" | "sigla" | "empty" | "suspect" {
+  const text = String(raw ?? "").trim();
+  if (!text || text === "-" || text === "–") return "empty";
+  const upper = text.toUpperCase().replace(/[^A-Z]/g, "");
+  if (upper && SIGLAS[upper] && upper.length === text.replace(/[^A-Za-z]/g, "").length)
+    return "sigla";
+  const num = Number(text.replace(",", "."));
+  if (Number.isFinite(num) && /^[0-9.,]+$/.test(text)) return "number";
+  return "suspect";
+}
+
 export const newId = () => Math.random().toString(36).slice(2, 10);
+
 
 export const emptyUnit = (index: number): Unit => ({
   id: newId(),
