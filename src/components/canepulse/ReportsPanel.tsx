@@ -5,15 +5,19 @@ import {
   Clock4,
   Download,
   FileText,
+  MessageCircle,
   Printer,
   ShieldAlert,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { FrontMetrics, Unit, UnitMetrics } from "@/lib/canepulse";
 import { computeUnitMetrics, fmt, signed, siglaLabel, statusOf } from "@/lib/canepulse";
+import { buildWhatsAppReport } from "@/lib/whatsapp";
+
 
 export function ReportsPanel({ units }: { units: Unit[] }) {
   const [scope, setScope] = useState<string>("group");
