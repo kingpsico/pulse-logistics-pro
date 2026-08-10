@@ -159,8 +159,10 @@ function RhythmTooltip({
   potential: number;
 }) {
   if (!active || !payload?.length) return null;
-  const point = payload[0].payload;
+  const point = payload[0]?.payload;
+  if (!point) return null;
   const below = point.rate < meta;
+
 
   return (
     <div className="rounded-lg border border-border/70 bg-card/95 px-3 py-2.5 shadow-lg backdrop-blur">
