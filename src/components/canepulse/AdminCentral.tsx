@@ -155,7 +155,10 @@ function AdminDashboard({ units, onLogout }: { units: Unit[]; onLogout: () => vo
                     <Copy className="h-3.5 w-3.5" /> Copiar
                   </Button>
                 </div>
-                <p className="mt-2 font-mono text-xs leading-relaxed text-foreground/90">{c.prompt}</p>
+                <p className="mt-2 whitespace-pre-line font-mono text-xs leading-relaxed text-foreground/90">
+                  {c.prompt}
+                </p>
+
               </div>
             </div>
           ))}
