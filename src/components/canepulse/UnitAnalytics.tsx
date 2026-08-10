@@ -1,5 +1,8 @@
 import {
   AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  Boxes,
   CheckCircle2,
   Clock4,
   Gauge,
@@ -13,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import type { Unit, UnitMetrics } from "@/lib/canepulse";
-import { fmt, statusOf } from "@/lib/canepulse";
+import { fmt, signed, siglaLabel, statusOf } from "@/lib/canepulse";
 
 type Props = {
   unit: Unit;
@@ -34,28 +37,79 @@ export function UnitAnalytics({ unit, metrics, onJustify }: Props) {
 
   return (
     <div className="space-y-5">
+      {/* Meta vs Potencial vs Real */}
+      <div className="surface-panel overflow-hidden rounded-xl border border-primary/30">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border/70 bg-primary/5 px-5 py-3">
+          <Target className="h-4 w-4 text-primary" />
+          <h4 className="font-display text-sm font-semibold">Meta × Potencial × Real</h4>
+          <span className="ml-auto text-[11px] uppercase tracking-wider text-muted-foreground">
+            Janela: {metrics.activeHours} h
+          </span>
+        </div>
+        <div className="grid gap-px bg-border/60 sm:grid-cols-2 xl:grid-cols-5">
+          <MatrixCell
+            label="Meta Horária"
+            value={`${fmt(metrics.hourlyTarget, 1)} t/h`}
+            hint={`${fmt(unit.dailyTarget)} t/dia ÷ 24`}
+          />
+          <MatrixCell
+            label="Potencial das Frentes"
+            value={`${fmt(metrics.potentialRatePerHour, 1)} t/h`}
+            hint={`${fmt(
+              unit.fronts.reduce((s, f) => s + (f.potential || 0), 0),
+              1,
+            )} conj./h × ${fmt(unit.density, 2)} t`}
+            tone={metrics.potentialRatePerHour >= metrics.hourlyTarget ? "ok" : "critical"}
+          />
+          <MatrixCell
+            label="Real das Frentes"
+            value={`${fmt(metrics.realRatePerHour, 1)} t/h`}
+            hint={`${fmt(metrics.realTrucks / Math.max(1, metrics.activeHours), 1)} conj./h médios`}
+            tone={metrics.realRatePerHour >= metrics.hourlyTarget ? "ok" : "risk"}
+          />
+          <MatrixCell
+            label="Saldo do Planejamento Diário"
+            value={`${signed(metrics.planningBalance24)} t/dia`}
+            hint="(Potencial − Meta) × 24"
+            tone={metrics.planningBalance24 >= 0 ? "ok" : "critical"}
+            arrow={metrics.planningBalance24 >= 0 ? "up" : "down"}
+          />
+          <MatrixCell
+            label="Desvio Real vs Potencial"
+            value={`${signed(-metrics.deviationRealVsPotential, 1)} t/h`}
+            hint={`Perda de campo: ${fmt(Math.max(0, metrics.deviationRealVsPotential) * 24)} t/dia`}
+            tone={metrics.deviationRealVsPotential <= 0 ? "ok" : "critical"}
+            arrow={metrics.deviationRealVsPotential <= 0 ? "up" : "down"}
+          />
+        </div>
+        <div className="border-t border-border/70 px-5 py-3">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Real sobre potencial disponível</span>
+            <span className="num font-semibold text-foreground">{fmt(metrics.compliance, 1)}%</span>
+          </div>
+          <Progress value={Math.min(100, metrics.compliance)} className="mt-2 h-2" />
+        </div>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metric
           icon={<Gauge className="h-4 w-4" />}
           label="Moagem Real (t/h)"
           value={fmt(metrics.realRatePerHour, 1)}
-          hint={`${fmt(metrics.realTrucks)} conj. × ${fmt(unit.density, 2)} t ÷ ${metrics.activeHours} h`}
+          hint={`${fmt(metrics.realTrucks, 1)} conj. × ${fmt(unit.density, 2)} t ÷ ${metrics.activeHours} h`}
         />
         <Metric
           icon={<LineChart className="h-4 w-4" />}
           label="Projeção 24h (Real)"
           value={fmt(metrics.projection24)}
-          hint={`Meta: ${fmt(unit.dailyTarget)} t`}
+          hint={`+ pátio ${fmt(metrics.initialTonnes)} t · Meta ${fmt(unit.dailyTarget)} t`}
           tone={metrics.targetDeltaReal >= 0 ? "ok" : "critical"}
         />
         <Metric
-          icon={<Target className="h-4 w-4" />}
-          label="Projeção 24h (Potencial)"
-          value={fmt(metrics.potential24)}
-          hint={`${metrics.targetDeltaPotential >= 0 ? "Superávit" : "Déficit"} de ${fmt(
-            Math.abs(metrics.targetDeltaPotential),
-          )} t`}
-          tone={metrics.targetDeltaPotential >= 0 ? "ok" : "risk"}
+          icon={<Boxes className="h-4 w-4" />}
+          label="Massa Realizada (t)"
+          value={fmt(metrics.totalRealTonnesDay)}
+          hint={`Pátio ${fmt(metrics.initialTonnes)} t + frentes ${fmt(metrics.realTonnes)} t`}
         />
         <Metric
           icon={<Clock4 className="h-4 w-4" />}
@@ -68,35 +122,27 @@ export function UnitAnalytics({ unit, metrics, onJustify }: Props) {
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="Potencial vs Real — Período" icon={<TrendingUp className="h-4 w-4" />}>
           <div className="grid grid-cols-2 gap-4">
-            <Stat label="Potencial (conj.)" value={fmt(metrics.potentialTrucks)} />
-            <Stat label="Real (conj.)" value={fmt(metrics.realTrucks)} />
+            <Stat label="Potencial (conj.)" value={fmt(metrics.potentialTrucks, 1)} />
+            <Stat label="Real (conj.)" value={fmt(metrics.realTrucks, 1)} />
             <Stat label="Potencial (t)" value={fmt(metrics.potentialTonnes)} />
             <Stat label="Real (t)" value={fmt(metrics.realTonnes)} />
-          </div>
-          <div className="mt-4">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Aderência ao potencial</span>
-              <span className="num font-semibold text-foreground">
-                {fmt(metrics.compliance, 1)}%
-              </span>
-            </div>
-            <Progress value={Math.min(100, metrics.compliance)} className="mt-2 h-2" />
           </div>
           <StatusBadge status={status} />
         </Panel>
 
         <Panel title="Fechamento do Dia vs Meta" icon={<Target className="h-4 w-4" />}>
           <BalanceRow
-            label="Se todas as frentes operarem no potencial (24h)"
+            label="Se todas as frentes operarem no potencial (24h + pátio)"
             value={metrics.targetDeltaPotential}
           />
           <BalanceRow
-            label="Tendência real projetada para 24h"
+            label="Tendência real projetada para 24h (+ pátio)"
             value={metrics.targetDeltaReal}
           />
           <p className="mt-4 text-xs text-muted-foreground">
             Meta da unidade: <span className="num text-foreground">{fmt(unit.dailyTarget)} t</span> ·
-            Ritmo potencial: <span className="num text-foreground">{fmt(metrics.potentialRatePerHour, 1)} t/h</span>
+            Toneladas iniciais do pátio:{" "}
+            <span className="num text-foreground">{fmt(metrics.initialTonnes)} t</span>
           </p>
         </Panel>
       </div>
@@ -130,21 +176,38 @@ export function UnitAnalytics({ unit, metrics, onJustify }: Props) {
                     {fmt(f.compliance, 1)}%
                   </Badge>
                   <span className="num text-xs text-muted-foreground">
-                    Potencial {fmt(f.potentialTotal)} · Real {fmt(f.real)} · Δ {fmt(f.delta)} conj.
+                    Potencial {fmt(f.potentialTotal, 1)} · Real {fmt(f.real, 1)} · Δ {fmt(f.delta, 1)} conj.
                   </span>
                   <span className="num ml-auto text-xs text-muted-foreground">
                     {deficit ? `Perda: ${fmt(f.lostTonnes)} t` : `Entregue: ${fmt(f.realTonnes)} t`}
                   </span>
                 </div>
+                {f.codes.length > 0 ? (
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {f.codes.map((c) => (
+                      <span
+                        key={c.code}
+                        className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning"
+                      >
+                        {siglaLabel(c.code)} · {c.hours.length}h
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
                 {deficit ? (
                   <div className="mt-3">
                     <label className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-warning">
-                      <AlertTriangle className="h-3.5 w-3.5" /> Justificativa obrigatória
+                      <AlertTriangle className="h-3.5 w-3.5" /> Justificativa
+                      {f.codes.length > 0 ? " complementar" : " obrigatória"}
                     </label>
                     <Textarea
                       value={f.front.justification ?? ""}
                       onChange={(e) => onJustify(f.front.id, e.target.value)}
-                      placeholder="Ex.: chuva na frente, manutenção corretiva, falta de operador…"
+                      placeholder={
+                        f.codes.length > 0
+                          ? `Auto: ${f.autoJustification}`
+                          : "Ex.: chuva na frente, manutenção corretiva, falta de operador…"
+                      }
                       className="mt-1.5 min-h-[64px] text-sm"
                     />
                   </div>
@@ -154,6 +217,40 @@ export function UnitAnalytics({ unit, metrics, onJustify }: Props) {
           })}
         </div>
       </Panel>
+    </div>
+  );
+}
+
+function MatrixCell({
+  label,
+  value,
+  hint,
+  tone = "neutral",
+  arrow,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: "neutral" | "ok" | "risk" | "critical";
+  arrow?: "up" | "down";
+}) {
+  const toneClass =
+    tone === "ok"
+      ? "text-success"
+      : tone === "risk"
+        ? "text-warning"
+        : tone === "critical"
+          ? "text-destructive"
+          : "text-foreground";
+  return (
+    <div className="bg-card px-5 py-4">
+      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={`num mt-2 flex items-center gap-1 font-display text-xl font-semibold ${toneClass}`}>
+        {arrow === "up" ? <ArrowUpRight className="h-4 w-4" /> : null}
+        {arrow === "down" ? <ArrowDownRight className="h-4 w-4" /> : null}
+        {value}
+      </p>
+      {hint ? <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
@@ -228,8 +325,7 @@ function BalanceRow({ label, value }: { label: string; value: number }) {
       <span
         className={`num text-sm font-semibold ${positive ? "text-success" : "text-destructive"}`}
       >
-        {positive ? "+" : "−"}
-        {fmt(Math.abs(value))} t
+        {signed(value)} t
       </span>
     </div>
   );
