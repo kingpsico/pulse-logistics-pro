@@ -8,6 +8,8 @@ import { TopBar } from "@/components/canepulse/TopBar";
 import { UnitPanel } from "@/components/canepulse/UnitPanel";
 import { UnitAnalytics } from "@/components/canepulse/UnitAnalytics";
 import { ReportsPanel } from "@/components/canepulse/ReportsPanel";
+import { AdminCentral } from "@/components/canepulse/AdminCentral";
+
 import type { Unit } from "@/lib/canepulse";
 import { computeUnitMetrics, emptyUnit, fmt } from "@/lib/canepulse";
 
