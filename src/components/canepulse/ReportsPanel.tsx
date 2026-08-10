@@ -91,9 +91,13 @@ export function ReportsPanel({ units }: { units: Unit[] }) {
               ))}
             </SelectContent>
           </Select>
+          <Button variant="secondary" onClick={copyWhatsApp}>
+            <MessageCircle className="h-4 w-4" /> Copiar para WhatsApp
+          </Button>
           <Button variant="secondary" size="icon" onClick={exportReport} aria-label="Exportar relatório">
             <Download className="h-4 w-4" />
           </Button>
+
           <Button variant="secondary" size="icon" onClick={() => window.print()} aria-label="Imprimir">
             <Printer className="h-4 w-4" />
           </Button>
