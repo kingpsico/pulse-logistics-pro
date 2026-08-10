@@ -42,7 +42,18 @@ export function ReportsPanel({ units }: { units: Unit[] }) {
     { target: 0, real: 0, potential: 0, projection: 0, potential24: 0, lost: 0, yard: 0 },
   );
 
+  const copyWhatsApp = async () => {
+    const text = buildWhatsAppReport(rows, scope === "group" ? "Grupo (consolidado)" : (selected[0]?.name ?? "-"));
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Relatório copiado para o WhatsApp");
+    } catch {
+      toast.error("Não foi possível copiar o relatório.");
+    }
+  };
+
   const exportReport = () => {
+
     const lines = [
       "CanePulse — Relatório operacional",
       `Escopo: ${scope === "group" ? "Grupo" : (selected[0]?.name ?? "-")}`,
