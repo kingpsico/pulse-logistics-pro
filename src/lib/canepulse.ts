@@ -11,6 +11,14 @@ export type HourRow = {
   codes?: Record<string, string>; // front number -> operational sigla (CH, FC, ...)
 };
 
+/** Raw OCR extraction awaiting human review before it is merged into the live state. */
+export type PendingRow = { hour: string; cells: Record<string, string> };
+export type PendingImport = {
+  rows: PendingRow[];
+  fronts: string[]; // every front number seen in the sheet
+  at: string;
+};
+
 export type Unit = {
   id: string;
   name: string;
@@ -21,7 +29,9 @@ export type Unit = {
   hours: HourRow[];
   ignoredFronts: string[];
   lastImport?: string;
+  pendingImport?: PendingImport | null;
 };
+
 
 /** Operational siglas: cell contains a code instead of a number → delivery = 0 + auto justification. */
 export const SIGLAS: Record<string, { icon: string; label: string }> = {
@@ -68,7 +78,20 @@ export function readCell(raw: unknown): { value: number; code?: string } {
   return upper ? { value: 0, code: upper } : { value: 0 };
 }
 
+/** Review heuristic: classifies a raw OCR cell for the post-OCR verification grid. */
+export function cellStatus(raw: string): "number" | "sigla" | "empty" | "suspect" {
+  const text = String(raw ?? "").trim();
+  if (!text || text === "-" || text === "–") return "empty";
+  const upper = text.toUpperCase().replace(/[^A-Z]/g, "");
+  if (upper && SIGLAS[upper] && upper.length === text.replace(/[^A-Za-z]/g, "").length)
+    return "sigla";
+  const num = Number(text.replace(",", "."));
+  if (Number.isFinite(num) && /^[0-9.,]+$/.test(text)) return "number";
+  return "suspect";
+}
+
 export const newId = () => Math.random().toString(36).slice(2, 10);
+
 
 export const emptyUnit = (index: number): Unit => ({
   id: newId(),
@@ -79,6 +102,8 @@ export const emptyUnit = (index: number): Unit => ({
   fronts: [],
   hours: [],
   ignoredFronts: [],
+  pendingImport: null,
+
 });
 
 export type FrontMetrics = {

@@ -101,8 +101,82 @@ export function runSuplyDmgAudit(units: Unit[]): AuditItem[] {
       });
   });
 
+  items.unshift(...rainModeAudit(units));
+  items.push(...reallocationPlan(units));
+
   return items;
 }
+
+const CLIMATE_CODES = new Set(["CH", "CDC", "EN"]);
+
+/** Modo Chuva: acumula perda climática (CH/CDC/EN) por unidade e frente. */
+function rainModeAudit(units: Unit[]): AuditItem[] {
+  const rows = units
+    .map((unit) => {
+      const m = computeUnitMetrics(unit);
+      const hits = m.fronts.flatMap((f) =>
+        f.codes
+          .filter((c) => CLIMATE_CODES.has(c.code))
+          .map((c) => ({
+            front: f.front.number,
+            code: c.code,
+            hours: c.hours.length,
+            tonnes: (f.front.potential || 0) * c.hours.length * (unit.density || 0),
+          })),
+      );
+      const tonnes = hits.reduce((s, h) => s + h.tonnes, 0);
+      const hours = hits.reduce((s, h) => s + h.hours, 0);
+      return { unit, tonnes, hours, hits };
+    })
+    .filter((r) => r.hits.length > 0);
+
+  if (rows.length === 0) return [];
+
+  const total = rows.reduce((s, r) => s + r.tonnes, 0);
+  return [
+    {
+      severity: total > 0 ? "critical" : "info",
+      title: `🌧️ Modo Chuva ativo: ${fmt(total)} t acumuladas de perda climática`,
+      detail: rows
+        .map(
+          (r) =>
+            `${r.unit.name}: ${fmt(r.tonnes)} t em ${r.hours}h paradas — ${r.hits
+              .map((h) => `F${h.front} ${h.code} (${h.hours}h)`)
+              .join(", ")}`,
+        )
+        .join(" · "),
+      action:
+        "Congele cobrança de aderência nas horas climáticas, migre conjuntos para blocos de solo drenado e recomponha a perda com horas extras em janela seca — cada hora de chuva vale a perda listada acima.",
+    },
+  ];
+}
+
+/** Prescrição de realocação imediata de ativos entre frentes com base no desvio ativo. */
+function reallocationPlan(units: Unit[]): AuditItem[] {
+  return units.flatMap((unit) => {
+    const m = computeUnitMetrics(unit);
+    if (!m.hasData) return [];
+    const worst = [...m.fronts].sort((a, b) => a.compliance - b.compliance)[0];
+    const best = [...m.fronts].sort((a, b) => b.compliance - a.compliance)[0];
+    if (!worst || !best || worst.front.id === best.front.id) return [];
+    const movable = Math.max(1, Math.round((best.compliance - 100) / 25));
+    return [
+      {
+        severity: worst.compliance < 90 ? "risk" : "info",
+        title: `🔁 ${unit.name}: realocar ${movable} conjunto(s) da frente ${best.front.number} → ${worst.front.number}`,
+        detail: `Frente ${best.front.number} opera a ${fmt(best.compliance, 1)}% (folga) enquanto ${worst.front.number} está a ${fmt(
+          worst.compliance,
+          1,
+        )}% com ${fmt(worst.lostTonnes)} t perdidas. Pátio disponível: ${fmt(unit.initialStock)} conj.`,
+        action: `Mova ${movable} conjunto(s) no próximo fechamento de hora e revalide o ritmo: ganho estimado de ${fmt(
+          movable * (unit.density || 0),
+          1,
+        )} t/h.`,
+      },
+    ];
+  });
+}
+
 
 function actionForCode(code: string, front: string): string {
   const map: Record<string, string> = {
@@ -174,20 +248,56 @@ export function runEngineerCopilot(units: Unit[]): DevCritique[] {
   }
 
   out.push({
-    title: "Camada de visualização subaproveitada",
+    title: "Gráfico de ritmo sem comparativo entre unidades",
     critique:
-      "As métricas horárias hoje são cartões e tabelas estáticas. Sem série temporal por hora, o gestor não vê a inflexão do ritmo dentro do turno, apenas a média achatada da janela.",
-    prompt:
-      "Adicione ao Motor Analítico do CanePulse um gráfico de linha/área (Recharts) de ritmo t/h por hora, com linha de referência de Meta Horária e Potencial, tooltip com siglas do período e seletor de frente; use apenas tokens semânticos do design system.",
+      "O gráfico de ritmo horário existe por unidade, mas não permite sobrepor usinas nem marcar as horas com sigla climática — a leitura de grupo continua manual.",
+    prompt: [
+      "**Evoluir o gráfico do Motor Analítico do CanePulse**",
+      "- Adicione modo 'Comparar Unidades' com uma série por usina no mesmo eixo.",
+      "- Marque com `ReferenceArea` âmbar as faixas horárias com siglas climáticas (CH, CDC, EN).",
+      "- Mantenha exclusivamente tokens `--chart-1..5` do design system.",
+    ].join("\n"),
+  });
+
+
+  out.push({
+    title: "Tema visual sem variação de densidade para telas de campo",
+    critique:
+      "O tema atual é único: em tablet sob sol o contraste cai e as tabelas ficam apertadas. Não existe modo alto-contraste nem densidade compacta/confortável.",
+    prompt: [
+      "**Atualizar tema do CanePulse**",
+      "- Adicione em `src/styles.css` uma variação de tema `[data-contrast='high']` elevando `--foreground`, `--border` e `--primary`.",
+      "- Crie um toggle no TopBar: `Padrão | Alto Contraste` e persista em localStorage.",
+      "- Adicione densidade `compacta/confortável` controlando padding das tabelas via classe utilitária.",
+      "- Use somente tokens semânticos, sem cores hardcoded.",
+    ].join("\n"),
   });
 
   out.push({
-    title: "OCR sem etapa de conferência humana",
+    title: "Componentes de botão sem hierarquia operacional",
     critique:
-      "A leitura Vision grava direto no estado sem diff nem confiança por célula. Um erro de OCR contamina silenciosamente perda, aderência e projeção de 24h.",
-    prompt:
-      "Implemente no CanePulse uma tela de revisão pós-OCR: mostre a matriz extraída em grid editável com destaque para células de baixa confiança e frentes não cadastradas, exigindo confirmação explícita antes de fundir os dados ao estado da unidade.",
+      "Ações críticas (fundir OCR, exportar relatório) usam a mesma variante de botões secundários — o operador não distingue o que é irreversível.",
+    prompt: [
+      "**Atualizar componentes de botão do CanePulse**",
+      "- Em `src/components/ui/button.tsx` adicione variantes `critical`, `confirm` e `ghostWarning` via `cva`, usando tokens `destructive`, `success` e `warning`.",
+      "- Aplique `confirm` no botão '✅ Confirmar e Fundir Dados' e `critical` em remoções.",
+      "- Inclua estado `loading` com spinner e `aria-busy`.",
+    ].join("\n"),
   });
+
+  out.push({
+    title: "Parâmetros operacionais fixos no código",
+    critique:
+      "Limites de 7 usinas, 8 frentes, janela de 24h e thresholds de aderência (90%/100%) estão espalhados como números mágicos, impedindo calibração por grupo.",
+    prompt: [
+      "**Parametrizar o CanePulse**",
+      "- Crie `src/lib/config.ts` com `MAX_UNITS`, `MAX_FRONTS`, `DAY_HOURS`, `COMPLIANCE_RISK`, `COMPLIANCE_OK`.",
+      "- Substitua todos os números mágicos por essas constantes.",
+      "- Exponha os thresholds em um card 'Parâmetros do Grupo' na aba Setup, persistindo em localStorage.",
+    ].join("\n"),
+  });
+
+
 
   return out;
 }

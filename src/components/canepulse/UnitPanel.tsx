@@ -20,7 +20,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { parseSpreadsheetImage } from "@/lib/vision.functions";
 import type { Unit } from "@/lib/canepulse";
-import { fmt, newId, readCell, siglaLabel } from "@/lib/canepulse";
+import { fmt, newId, siglaLabel } from "@/lib/canepulse";
+import { OcrReview } from "./OcrReview";
 
 type Props = {
   unit: Unit;
@@ -83,28 +84,24 @@ export function UnitPanel({ unit, index, onChange, onRemove }: Props) {
         toast.error(result.error);
         return;
       }
-      const registered = new Set(unit.fronts.map((f) => f.number));
-      const ignored = new Set<string>();
-      const hours = result.hours.map((row) => {
-        const counts: Record<string, number> = {};
-        const codes: Record<string, string> = {};
+      const seen: string[] = [];
+      const rows = result.hours.map((row) => {
+        const cells: Record<string, string> = {};
         Object.entries(row.counts).forEach(([front, value]) => {
-          if (!registered.has(front)) {
-            ignored.add(front);
-            return;
-          }
-          const cell = readCell(value);
-          counts[front] = cell.value;
-          if (cell.code) codes[front] = cell.code;
+          if (!seen.includes(front)) seen.push(front);
+          cells[front] = String(value ?? "").trim();
         });
-        return { hour: row.hour, counts, codes };
+        return { hour: row.hour, cells };
       });
       onChange({
-        hours,
-        ignoredFronts: [...ignored],
-        lastImport: new Date().toLocaleString("pt-BR"),
+        pendingImport: {
+          rows,
+          fronts: seen.sort((a, b) => Number(a) - Number(b)),
+          at: new Date().toLocaleString("pt-BR"),
+        },
       });
-      toast.success(`${hours.length} hora(s) importada(s) para ${unit.name}.`);
+      toast.success(`${rows.length} hora(s) extraída(s) — revise antes de fundir.`);
+
     } catch {
       toast.error("Erro ao processar a imagem.");
     } finally {
@@ -296,6 +293,25 @@ export function UnitPanel({ unit, index, onChange, onRemove }: Props) {
               e.target.value = "";
             }}
           />
+
+          {unit.pendingImport ? (
+            <OcrReview
+              unit={unit}
+              pending={unit.pendingImport}
+              onCancel={() => onChange({ pendingImport: null })}
+              onConfirm={(hours, ignoredFronts) => {
+                onChange({
+                  hours,
+                  ignoredFronts,
+                  lastImport: new Date().toLocaleString("pt-BR"),
+                  pendingImport: null,
+                });
+                toast.success(`${hours.length} hora(s) fundida(s) em ${unit.name}.`);
+              }}
+            />
+          ) : null}
+
+
 
           {unit.ignoredFronts.length > 0 ? (
             <p className="mt-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
