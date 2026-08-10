@@ -5,15 +5,19 @@ import {
   Clock4,
   Download,
   FileText,
+  MessageCircle,
   Printer,
   ShieldAlert,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { FrontMetrics, Unit, UnitMetrics } from "@/lib/canepulse";
 import { computeUnitMetrics, fmt, signed, siglaLabel, statusOf } from "@/lib/canepulse";
+import { buildWhatsAppReport } from "@/lib/whatsapp";
+
 
 export function ReportsPanel({ units }: { units: Unit[] }) {
   const [scope, setScope] = useState<string>("group");
@@ -38,7 +42,18 @@ export function ReportsPanel({ units }: { units: Unit[] }) {
     { target: 0, real: 0, potential: 0, projection: 0, potential24: 0, lost: 0, yard: 0 },
   );
 
+  const copyWhatsApp = async () => {
+    const text = buildWhatsAppReport(rows, scope === "group" ? "Grupo (consolidado)" : (selected[0]?.name ?? "-"));
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Relatório copiado para o WhatsApp");
+    } catch {
+      toast.error("Não foi possível copiar o relatório.");
+    }
+  };
+
   const exportReport = () => {
+
     const lines = [
       "CanePulse — Relatório operacional",
       `Escopo: ${scope === "group" ? "Grupo" : (selected[0]?.name ?? "-")}`,
@@ -91,9 +106,13 @@ export function ReportsPanel({ units }: { units: Unit[] }) {
               ))}
             </SelectContent>
           </Select>
+          <Button variant="secondary" onClick={copyWhatsApp}>
+            <MessageCircle className="h-4 w-4" /> Copiar para WhatsApp
+          </Button>
           <Button variant="secondary" size="icon" onClick={exportReport} aria-label="Exportar relatório">
             <Download className="h-4 w-4" />
           </Button>
+
           <Button variant="secondary" size="icon" onClick={() => window.print()} aria-label="Imprimir">
             <Printer className="h-4 w-4" />
           </Button>

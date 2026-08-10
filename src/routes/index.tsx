@@ -8,6 +8,8 @@ import { TopBar } from "@/components/canepulse/TopBar";
 import { UnitPanel } from "@/components/canepulse/UnitPanel";
 import { UnitAnalytics } from "@/components/canepulse/UnitAnalytics";
 import { ReportsPanel } from "@/components/canepulse/ReportsPanel";
+import { AdminCentral } from "@/components/canepulse/AdminCentral";
+
 import type { Unit } from "@/lib/canepulse";
 import { computeUnitMetrics, emptyUnit, fmt } from "@/lib/canepulse";
 
@@ -35,10 +37,12 @@ export const Route = createFileRoute("/")({
 
 const STORAGE_KEY = "canepulse:state:v1";
 const TAB_KEY = "canepulse:tab:v1";
+const AUTH_KEY = "canepulse:admin:v1";
 
 function CanePulse() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [tab, setTab] = useState("setup");
+  const [adminAuthed, setAdminAuthed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -48,6 +52,7 @@ function CanePulse() {
       setUnits(parsed.map((u) => ({ ...emptyUnit(0), ...u })));
       const savedTab = localStorage.getItem(TAB_KEY);
       if (savedTab) setTab(savedTab);
+      setAdminAuthed(localStorage.getItem(AUTH_KEY) === "1");
     } catch {
       setUnits([emptyUnit(0)]);
     }
@@ -61,6 +66,11 @@ function CanePulse() {
   useEffect(() => {
     if (hydrated) localStorage.setItem(TAB_KEY, tab);
   }, [tab, hydrated]);
+
+  useEffect(() => {
+    if (hydrated) localStorage.setItem(AUTH_KEY, adminAuthed ? "1" : "0");
+  }, [adminAuthed, hydrated]);
+
 
   const patchUnit = (id: string, patch: Partial<Unit>) =>
     setUnits((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
@@ -103,7 +113,9 @@ function CanePulse() {
             <TabsTrigger value="feed">Abastecimento e Visão</TabsTrigger>
             <TabsTrigger value="analytics">Motor Analítico</TabsTrigger>
             <TabsTrigger value="reports">Relatório</TabsTrigger>
+            <TabsTrigger value="admin">🔒 Central Suprema Admin</TabsTrigger>
           </TabsList>
+
 
           <TabsContent value="setup" className="mt-8">
             <h1 className="font-display text-2xl font-semibold">
@@ -195,6 +207,11 @@ function CanePulse() {
           <TabsContent value="reports" className="mt-8">
             <ReportsPanel units={units} />
           </TabsContent>
+
+          <TabsContent value="admin" className="mt-8">
+            <AdminCentral units={units} authed={adminAuthed} onAuthChange={setAdminAuthed} />
+          </TabsContent>
+
         </Tabs>
       </main>
     </div>
