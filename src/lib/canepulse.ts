@@ -65,7 +65,7 @@ export function readCell(raw: unknown): { value: number; code?: string } {
   if (upper && SIGLAS[upper]) return { value: 0, code: upper };
   const num = Number(text.replace(",", "."));
   if (Number.isFinite(num)) return { value: num };
-  return { value: 0, code: upper || undefined };
+  return upper ? { value: 0, code: upper } : { value: 0 };
 }
 
 export const newId = () => Math.random().toString(36).slice(2, 10);
