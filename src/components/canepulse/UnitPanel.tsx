@@ -20,7 +20,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { parseSpreadsheetImage } from "@/lib/vision.functions";
 import type { Unit } from "@/lib/canepulse";
-import { fmt, newId, readCell, siglaLabel } from "@/lib/canepulse";
+import { fmt, newId, siglaLabel } from "@/lib/canepulse";
+import { OcrReview } from "./OcrReview";
 
 type Props = {
   unit: Unit;
