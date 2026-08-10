@@ -83,28 +83,24 @@ export function UnitPanel({ unit, index, onChange, onRemove }: Props) {
         toast.error(result.error);
         return;
       }
-      const registered = new Set(unit.fronts.map((f) => f.number));
-      const ignored = new Set<string>();
-      const hours = result.hours.map((row) => {
-        const counts: Record<string, number> = {};
-        const codes: Record<string, string> = {};
+      const seen: string[] = [];
+      const rows = result.hours.map((row) => {
+        const cells: Record<string, string> = {};
         Object.entries(row.counts).forEach(([front, value]) => {
-          if (!registered.has(front)) {
-            ignored.add(front);
-            return;
-          }
-          const cell = readCell(value);
-          counts[front] = cell.value;
-          if (cell.code) codes[front] = cell.code;
+          if (!seen.includes(front)) seen.push(front);
+          cells[front] = String(value ?? "").trim();
         });
-        return { hour: row.hour, counts, codes };
+        return { hour: row.hour, cells };
       });
       onChange({
-        hours,
-        ignoredFronts: [...ignored],
-        lastImport: new Date().toLocaleString("pt-BR"),
+        pendingImport: {
+          rows,
+          fronts: seen.sort((a, b) => Number(a) - Number(b)),
+          at: new Date().toLocaleString("pt-BR"),
+        },
       });
-      toast.success(`${hours.length} hora(s) importada(s) para ${unit.name}.`);
+      toast.success(`${rows.length} hora(s) extraída(s) — revise antes de fundir.`);
+
     } catch {
       toast.error("Erro ao processar a imagem.");
     } finally {
