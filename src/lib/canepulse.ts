@@ -102,6 +102,8 @@ export const emptyUnit = (index: number): Unit => ({
   fronts: [],
   hours: [],
   ignoredFronts: [],
+  pendingImport: null,
+
 });
 
 export type FrontMetrics = {
