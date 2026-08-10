@@ -11,6 +11,14 @@ export type HourRow = {
   codes?: Record<string, string>; // front number -> operational sigla (CH, FC, ...)
 };
 
+/** Raw OCR extraction awaiting human review before it is merged into the live state. */
+export type PendingRow = { hour: string; cells: Record<string, string> };
+export type PendingImport = {
+  rows: PendingRow[];
+  fronts: string[]; // every front number seen in the sheet
+  at: string;
+};
+
 export type Unit = {
   id: string;
   name: string;
@@ -21,7 +29,9 @@ export type Unit = {
   hours: HourRow[];
   ignoredFronts: string[];
   lastImport?: string;
+  pendingImport?: PendingImport | null;
 };
+
 
 /** Operational siglas: cell contains a code instead of a number → delivery = 0 + auto justification. */
 export const SIGLAS: Record<string, { icon: string; label: string }> = {
