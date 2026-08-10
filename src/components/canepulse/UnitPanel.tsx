@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
+  Boxes,
   Building2,
   Gauge,
   ImageUp,
@@ -19,7 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { parseSpreadsheetImage } from "@/lib/vision.functions";
 import type { Unit } from "@/lib/canepulse";
-import { fmt, newId } from "@/lib/canepulse";
+import { fmt, newId, readCell, siglaLabel } from "@/lib/canepulse";
 
 type Props = {
   unit: Unit;
@@ -51,7 +52,11 @@ export function UnitPanel({ unit, index, onChange, onRemove }: Props) {
     onChange({
       fronts: [
         ...unit.fronts,
-        { id: newId(), number: frontNumber.trim(), potential: Number(frontPotential) || 0 },
+        {
+          id: newId(),
+          number: frontNumber.trim(),
+          potential: Math.round((Number(frontPotential.replace(",", ".")) || 0) * 10) / 10,
+        },
       ],
     });
     setFrontNumber("");
@@ -82,11 +87,17 @@ export function UnitPanel({ unit, index, onChange, onRemove }: Props) {
       const ignored = new Set<string>();
       const hours = result.hours.map((row) => {
         const counts: Record<string, number> = {};
+        const codes: Record<string, string> = {};
         Object.entries(row.counts).forEach(([front, value]) => {
-          if (registered.has(front)) counts[front] = Number(value) || 0;
-          else ignored.add(front);
+          if (!registered.has(front)) {
+            ignored.add(front);
+            return;
+          }
+          const cell = readCell(value);
+          counts[front] = cell.value;
+          if (cell.code) codes[front] = cell.code;
         });
-        return { hour: row.hour, counts };
+        return { hour: row.hour, counts, codes };
       });
       onChange({
         hours,
@@ -123,7 +134,7 @@ export function UnitPanel({ unit, index, onChange, onRemove }: Props) {
         </Button>
       </div>
 
-      <div className="mt-5 grid gap-4 md:grid-cols-3">
+      <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Field label="Nome da Unidade" icon={<Building2 className="h-3.5 w-3.5" />}>
           <Input value={unit.name} onChange={(e) => onChange({ name: e.target.value })} />
         </Field>
@@ -137,7 +148,7 @@ export function UnitPanel({ unit, index, onChange, onRemove }: Props) {
             className="num"
           />
         </Field>
-        <Field label="Densidade de Carga (t/viagem)" icon={<Gauge className="h-3.5 w-3.5" />}>
+        <Field label="Carga Líquida Média (t/conj.)" icon={<Gauge className="h-3.5 w-3.5" />}>
           <Input
             type="number"
             min={0}
@@ -147,6 +158,23 @@ export function UnitPanel({ unit, index, onChange, onRemove }: Props) {
             placeholder="0"
             className="num"
           />
+        </Field>
+        <Field label="Estoque Inicial do Pátio (Conjuntos)" icon={<Boxes className="h-3.5 w-3.5" />}>
+          <Input
+            type="number"
+            min={0}
+            step="1"
+            value={unit.initialStock || ""}
+            onChange={(e) => onChange({ initialStock: Number(e.target.value) || 0 })}
+            placeholder="0"
+            className="num"
+          />
+          <p className="mt-1.5 text-[11px] text-muted-foreground">
+            Toneladas iniciais:{" "}
+            <span className="num text-foreground">
+              {fmt((unit.initialStock || 0) * (unit.density || 0))} t
+            </span>
+          </p>
         </Field>
       </div>
 
@@ -172,9 +200,11 @@ export function UnitPanel({ unit, index, onChange, onRemove }: Props) {
               <Input
                 type="number"
                 min={0}
+                step="0.1"
+                inputMode="decimal"
+                placeholder="1.8"
                 value={frontPotential}
                 onChange={(e) => setFrontPotential(e.target.value)}
-                placeholder="0"
                 className="num mt-1"
               />
             </div>
@@ -204,9 +234,9 @@ export function UnitPanel({ unit, index, onChange, onRemove }: Props) {
                   unit.fronts.map((front) => (
                     <tr key={front.id} className="border-t border-border/60">
                       <td className="px-3 py-2 num font-medium">{front.number}</td>
-                      <td className="px-3 py-2 num text-right">{fmt(front.potential)}</td>
+                      <td className="px-3 py-2 num text-right">{fmt(front.potential, 1)}</td>
                       <td className="px-3 py-2 num text-right text-muted-foreground">
-                        {fmt(front.potential * 24 * unit.density)}
+                        {fmt(front.potential * 24 * unit.density, 1)}
                       </td>
                       <td className="px-3 py-2 text-right">
                         <button
@@ -292,13 +322,28 @@ export function UnitPanel({ unit, index, onChange, onRemove }: Props) {
                   {unit.hours.map((row, i) => (
                     <tr key={`${row.hour}-${i}`} className="border-t border-border/60">
                       <td className="px-2 py-1.5 font-medium">{row.hour}</td>
-                      {unit.fronts.map((f) => (
-                        <td key={f.id} className="px-2 py-1.5 num text-right">
-                          {row.counts[f.number] ?? 0}
-                        </td>
-                      ))}
+                      {unit.fronts.map((f) => {
+                        const code = row.codes?.[f.number];
+                        return (
+                          <td key={f.id} className="px-2 py-1.5 text-right">
+                            {code ? (
+                              <span
+                                title={siglaLabel(code)}
+                                className="inline-flex items-center rounded border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-warning"
+                              >
+                                {code}
+                              </span>
+                            ) : (
+                              <span className="num">{fmt(row.counts[f.number] ?? 0, 1)}</span>
+                            )}
+                          </td>
+                        );
+                      })}
                       <td className="px-2 py-1.5 num text-right text-primary">
-                        {unit.fronts.reduce((s, f) => s + (row.counts[f.number] ?? 0), 0)}
+                        {fmt(
+                          unit.fronts.reduce((s, f) => s + (row.counts[f.number] ?? 0), 0),
+                          1,
+                        )}
                       </td>
                     </tr>
                   ))}
