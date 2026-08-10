@@ -248,12 +248,17 @@ export function runEngineerCopilot(units: Unit[]): DevCritique[] {
   }
 
   out.push({
-    title: "Camada de visualização subaproveitada",
+    title: "Gráfico de ritmo sem comparativo entre unidades",
     critique:
-      "As métricas horárias hoje são cartões e tabelas estáticas. Sem série temporal por hora, o gestor não vê a inflexão do ritmo dentro do turno, apenas a média achatada da janela.",
-    prompt:
-      "Adicione ao Motor Analítico do CanePulse um gráfico de linha/área (Recharts) de ritmo t/h por hora, com linha de referência de Meta Horária e Potencial, tooltip com siglas do período e seletor de frente; use apenas tokens semânticos do design system.",
+      "O gráfico de ritmo horário existe por unidade, mas não permite sobrepor usinas nem marcar as horas com sigla climática — a leitura de grupo continua manual.",
+    prompt: [
+      "**Evoluir o gráfico do Motor Analítico do CanePulse**",
+      "- Adicione modo 'Comparar Unidades' com uma série por usina no mesmo eixo.",
+      "- Marque com `ReferenceArea` âmbar as faixas horárias com siglas climáticas (CH, CDC, EN).",
+      "- Mantenha exclusivamente tokens `--chart-1..5` do design system.",
+    ].join("\n"),
   });
+
 
   out.push({
     title: "Tema visual sem variação de densidade para telas de campo",
