@@ -76,7 +76,7 @@ export const parseSpreadsheetImage = createServerFn({ method: "POST" })
           hours: z.array(
             z.object({
               hour: z.string(),
-              counts: z.record(z.string(), z.coerce.number()),
+              counts: z.record(z.string(), z.union([z.number(), z.string()])),
             }),
           ),
         })
