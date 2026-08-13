@@ -110,19 +110,27 @@ export function OcrReview({ unit, pending, onCancel, onConfirm }: Props) {
                 {columns.map((front) => {
                   const raw = row.cells[front] ?? "";
                   const status = cellStatus(raw);
+                  const parsed = readCell(raw);
                   const flagged = !registered.has(front) || status === "suspect";
+                  const coded = status === "sigla" || status === "mixed";
                   return (
                     <td key={front} className="px-1 py-1.5">
                       <input
                         value={raw}
                         onChange={(e) => setCell(rowIndex, front, e.target.value)}
-                        title={status === "sigla" ? siglaLabel(raw.trim().toUpperCase()) : undefined}
+                        title={
+                          coded && parsed.code
+                            ? `${parsed.value} conj. · ${siglaLabel(parsed.code)}`
+                            : undefined
+                        }
                         className={`num w-16 rounded border bg-transparent px-1.5 py-1 text-right text-xs outline-none focus:border-primary ${
                           flagged
                             ? "border-warning/70 bg-warning/10 text-warning"
-                            : status === "sigla"
-                              ? "border-border/60 text-primary"
-                              : "border-border/60"
+                            : status === "mixed"
+                              ? "border-chart-3/60 text-chart-3"
+                              : status === "sigla"
+                                ? "border-border/60 text-primary"
+                                : "border-border/60"
                         }`}
                       />
                     </td>
