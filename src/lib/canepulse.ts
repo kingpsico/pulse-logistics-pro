@@ -66,27 +66,49 @@ export const siglaLabel = (code: string) => {
   return entry ? `${entry.icon} ${entry.label}` : code;
 };
 
-/** Normalizes a raw OCR cell into either a numeric delivery or a sigla code. */
+/** Weather/field-condition codes that shade the rhythm chart. */
+export const WEATHER_CODES = ["CH", "CDC", "EN"] as const;
+
+const NUMBER_RE = /\d+(?:[.,]\d+)?/;
+const LETTERS_RE = /[A-Z]+/g;
+
+/**
+ * Normalizes a raw OCR cell into a numeric delivery and/or a sigla code.
+ * Supports mixed cells such as "1 | CH", "2 - FC", "1 MC", "CH 1".
+ */
 export function readCell(raw: unknown): { value: number; code?: string } {
   if (typeof raw === "number") return { value: Number.isFinite(raw) ? raw : 0 };
   const text = String(raw ?? "").trim();
-  if (!text || text === "-" || text === "–") return { value: 0 };
-  const upper = text.toUpperCase().replace(/[^A-Z]/g, "");
-  if (upper && SIGLAS[upper]) return { value: 0, code: upper };
-  const num = Number(text.replace(",", "."));
-  if (Number.isFinite(num)) return { value: num };
-  return upper ? { value: 0, code: upper } : { value: 0 };
+  if (!text || /^[-–—\s|/]+$/.test(text)) return { value: 0 };
+
+  const upper = text.toUpperCase();
+  const groups = upper.match(LETTERS_RE) ?? [];
+  const known = groups.filter((g) => SIGLAS[g]);
+  const code =
+    known.sort((a, b) => b.length - a.length)[0] ??
+    groups.sort((a, b) => b.length - a.length)[0];
+
+  const numMatch = upper.match(NUMBER_RE);
+  const value = numMatch ? Number(numMatch[0].replace(",", ".")) : 0;
+
+  return { value: Number.isFinite(value) ? value : 0, ...(code ? { code } : {}) };
 }
 
 /** Review heuristic: classifies a raw OCR cell for the post-OCR verification grid. */
-export function cellStatus(raw: string): "number" | "sigla" | "empty" | "suspect" {
+export function cellStatus(raw: string): "number" | "sigla" | "mixed" | "empty" | "suspect" {
   const text = String(raw ?? "").trim();
-  if (!text || text === "-" || text === "–") return "empty";
-  const upper = text.toUpperCase().replace(/[^A-Z]/g, "");
-  if (upper && SIGLAS[upper] && upper.length === text.replace(/[^A-Za-z]/g, "").length)
-    return "sigla";
-  const num = Number(text.replace(",", "."));
-  if (Number.isFinite(num) && /^[0-9.,]+$/.test(text)) return "number";
+  if (!text || /^[-–—\s|/]+$/.test(text)) return "empty";
+
+  const upper = text.toUpperCase();
+  const groups = upper.match(LETTERS_RE) ?? [];
+  const hasKnown = groups.some((g) => SIGLAS[g]);
+  const hasUnknownLetters = groups.some((g) => !SIGLAS[g]);
+  const hasNumber = NUMBER_RE.test(upper);
+
+  if (hasUnknownLetters) return "suspect";
+  if (hasKnown && hasNumber) return "mixed";
+  if (hasKnown) return "sigla";
+  if (hasNumber) return /^[0-9.,\s]+$/.test(text) ? "number" : "suspect";
   return "suspect";
 }
 

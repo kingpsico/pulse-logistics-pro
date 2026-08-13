@@ -198,6 +198,7 @@ function CanePulse() {
                 <UnitAnalytics
                   unit={unit}
                   metrics={computeUnitMetrics(unit)}
+                  allUnits={units}
                   onJustify={(frontId, text) => justify(unit.id, frontId, text)}
                 />
               </div>

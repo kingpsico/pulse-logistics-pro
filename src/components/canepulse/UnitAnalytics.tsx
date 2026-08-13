@@ -23,9 +23,10 @@ type Props = {
   unit: Unit;
   metrics: UnitMetrics;
   onJustify: (frontId: string, text: string) => void;
+  allUnits?: Unit[];
 };
 
-export function UnitAnalytics({ unit, metrics, onJustify }: Props) {
+export function UnitAnalytics({ unit, metrics, onJustify, allUnits }: Props) {
   if (!metrics.hasData) {
     return (
       <div className="rounded-xl border border-dashed border-border/70 p-8 text-center text-sm text-muted-foreground">
@@ -120,7 +121,7 @@ export function UnitAnalytics({ unit, metrics, onJustify }: Props) {
         />
       </div>
 
-      <HourlyRhythmChart unit={unit} metrics={metrics} />
+      <HourlyRhythmChart unit={unit} metrics={metrics} allUnits={allUnits ?? [unit]} />
 
       <div className="grid gap-4 lg:grid-cols-2">
 
