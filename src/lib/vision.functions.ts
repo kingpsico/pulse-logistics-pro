@@ -15,7 +15,7 @@ Return STRICT JSON only, no markdown, with this shape:
 Rules:
 - "hour" must be a readable label taken from the sheet (keep the original label).
 - counts keys must be the front numbers exactly as printed (digits only).
-- Cell values are either a number (may be decimal) or the literal code string exactly as printed.
+- Cell values are either a number (may be decimal), a code string, or BOTH together (e.g. "1 | CH", "2 - FC", "1 MC"). When a cell mixes a number and a code, return the full text exactly as printed so the engine can keep both.
 - Empty or dash cells are 0.
 - Do not invent hours or fronts that are not visible.`;
 
