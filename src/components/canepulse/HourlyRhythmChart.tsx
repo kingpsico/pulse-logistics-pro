@@ -126,7 +126,7 @@ export function HourlyRhythmChart({
       .filter((h) => axisRef.includes(h))
       .map((hour) => {
         const i = axisRef.indexOf(hour);
-        const next = axisRef[i + 1] ?? axisRef[i];
+        const next: string = axisRef[i + 1] ?? hour;
         return { x1: hour, x2: next };
       });
   }, [compareMode, comparableUnits, unit, data, axis, selected]);
