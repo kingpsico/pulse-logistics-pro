@@ -85,14 +85,25 @@ export function HourlyRhythmChart({
   const data: Point[] = useMemo(() => {
     const density = unit.density || 0;
     const fronts = selected === "all" ? unit.fronts.map((f) => f.number) : [selected];
-    return unit.hours.map((row) => ({
-      hour: row.hour,
-      rate: fronts.reduce((s, n) => s + (row.counts[n] ?? 0), 0) * density,
-      codes: fronts
-        .map((n) => ({ front: n, code: row.codes?.[n] ?? "" }))
-        .filter((c) => c.code),
-    }));
-  }, [unit, selected]);
+    const buffer = metrics.hourlyTarget * 2;
+    let cumulative = metrics.initialTonnes;
+    let inflowSum = 0;
+    return unit.hours.map((row, i) => {
+      const rate = fronts.reduce((s, n) => s + (row.counts[n] ?? 0), 0) * density;
+      inflowSum += rate;
+      cumulative += rate - metaLine;
+      const avgInflow = inflowSum / (i + 1);
+      const stock3h = cumulative + (avgInflow - metaLine) * 3;
+      return {
+        hour: row.hour,
+        rate,
+        stock3h,
+        lowBuffer: stock3h < buffer,
+        codes: fronts.map((n) => ({ front: n, code: row.codes?.[n] ?? "" })).filter((c) => c.code),
+      };
+    });
+  }, [unit, selected, metaLine, metrics.hourlyTarget, metrics.initialTonnes]);
+
 
   /** Eixo consolidado (07h→24h + horas extras vistas nas planilhas). */
   const axis = useMemo(() => {
