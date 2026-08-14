@@ -27,7 +27,14 @@ import {
 import type { Unit, UnitMetrics } from "@/lib/canepulse";
 import { WEATHER_CODES, fmt, siglaLabel } from "@/lib/canepulse";
 
-type Point = { hour: string; rate: number; codes: { front: string; code: string }[] };
+type Point = {
+  hour: string;
+  rate: number;
+  stock3h: number;
+  lowBuffer: boolean;
+  codes: { front: string; code: string }[];
+};
+
 
 const SERIES_TOKENS = [
   "var(--color-chart-1)",
