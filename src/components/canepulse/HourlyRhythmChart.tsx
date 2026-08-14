@@ -348,18 +348,46 @@ export function HourlyRhythmChart({
   );
 }
 
+/** Marcador do estoque projetado: vermelho quando abaixo do buffer de 2h de moagem. */
+function StockDot({
+  cx,
+  cy,
+  payload,
+  buffer,
+}: {
+  cx?: number;
+  cy?: number;
+  payload?: Point;
+  buffer: number;
+}) {
+  if (cx == null || cy == null || !payload) return null;
+  const low = payload.stock3h < buffer;
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={low ? 5 : 3}
+      fill={low ? "var(--color-destructive)" : "var(--color-chart-5)"}
+      stroke={low ? "var(--color-destructive)" : "none"}
+      strokeWidth={low ? 2 : 0}
+    />
+  );
+}
+
 function RhythmTooltip({
   active,
   payload,
   label,
   meta,
   potential,
+  buffer,
 }: {
   active?: boolean;
   payload?: { payload: Point }[];
   label?: string;
   meta: number;
   potential: number;
+  buffer: number;
 }) {
   if (!active || !payload?.length) return null;
   const point = payload[0]?.payload;
@@ -373,6 +401,14 @@ function RhythmTooltip({
       <p className="num mt-0.5 text-[11px] text-muted-foreground">
         Meta {fmt(meta, 1)} · Potencial {fmt(potential, 1)} t/h
       </p>
+      <p
+        className={`num mt-1 text-[11px] font-medium ${
+          point.stock3h < buffer ? "text-destructive" : "text-muted-foreground"
+        }`}
+      >
+        Estoque projetado +3h: {fmt(point.stock3h, 1)} t
+        {point.stock3h < buffer ? ` · abaixo do buffer de ${fmt(buffer, 1)} t` : ""}
+      </p>
       {below ? (
         <p className="num mt-1 text-[11px] font-medium text-destructive">
           −{fmt(meta - point.rate, 1)} t/h vs meta
@@ -380,6 +416,7 @@ function RhythmTooltip({
       ) : (
         <p className="mt-1 text-[11px] font-medium text-success">Acima da meta horária</p>
       )}
+
       {point.codes.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-1">
           {point.codes.map((c) => (
