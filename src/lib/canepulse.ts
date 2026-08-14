@@ -162,7 +162,24 @@ export type UnitMetrics = {
   compliance: number;
   lostTonnes: number;
   hasData: boolean;
+  /** Entrega total projetada = (real t/h × 24) + toneladas iniciais do pátio */
+  projectedTotalDelivery: number;
+  /** Déficit total = meta diária − entrega total projetada */
+  totalDeficit: number;
+  /** Horas de parada industrial previstas (0 se sem risco) */
+  starvationHours: number;
+  starvationLabel: string;
+  starvationRisk: boolean;
 };
+
+/** Converte horas decimais em texto "Xh e Ymin". */
+export function formatHoursMinutes(hours: number) {
+  const total = Math.max(0, Math.round(hours * 60));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${h}h e ${String(m).padStart(2, "0")}min`;
+}
+
 
 const safeDiv = (a: number, b: number) => (b > 0 ? a / b : 0);
 
