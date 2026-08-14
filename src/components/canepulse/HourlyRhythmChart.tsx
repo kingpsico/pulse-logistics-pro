@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import {
   Area,
-  AreaChart,
   CartesianGrid,
+  ComposedChart,
   Legend,
   Line,
   LineChart,
@@ -13,6 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+
 import { Activity } from "lucide-react";
 
 import { Label } from "@/components/ui/label";
