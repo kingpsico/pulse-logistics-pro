@@ -162,7 +162,24 @@ export type UnitMetrics = {
   compliance: number;
   lostTonnes: number;
   hasData: boolean;
+  /** Entrega total projetada = (real t/h × 24) + toneladas iniciais do pátio */
+  projectedTotalDelivery: number;
+  /** Déficit total = meta diária − entrega total projetada */
+  totalDeficit: number;
+  /** Horas de parada industrial previstas (0 se sem risco) */
+  starvationHours: number;
+  starvationLabel: string;
+  starvationRisk: boolean;
 };
+
+/** Converte horas decimais em texto "Xh e Ymin". */
+export function formatHoursMinutes(hours: number) {
+  const total = Math.max(0, Math.round(hours * 60));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${h}h e ${String(m).padStart(2, "0")}min`;
+}
+
 
 const safeDiv = (a: number, b: number) => (b > 0 ? a / b : 0);
 
@@ -211,6 +228,10 @@ export function computeUnitMetrics(unit: Unit): UnitMetrics {
   const potential24 = potentialRatePerHour * 24;
   const hourlyTarget = (unit.dailyTarget || 0) / 24;
 
+  const projectedTotalDelivery = projection24 + initialTonnes;
+  const totalDeficit = (unit.dailyTarget || 0) - projectedTotalDelivery;
+  const starvationHours = totalDeficit > 0 ? safeDiv(totalDeficit, hourlyTarget) : 0;
+
   return {
     activeHours,
     hourLabels: unit.hours.map((h) => h.hour),
@@ -233,7 +254,16 @@ export function computeUnitMetrics(unit: Unit): UnitMetrics {
     compliance: safeDiv(realTrucks, potentialTrucks) * 100,
     lostTonnes: fronts.reduce((s, f) => s + f.lostTonnes, 0),
     hasData: activeHours > 0 && registered.length > 0,
+    projectedTotalDelivery,
+    totalDeficit,
+    starvationHours,
+    starvationRisk: totalDeficit > 0 && starvationHours > 0,
+    starvationLabel:
+      totalDeficit > 0 && starvationHours > 0
+        ? formatHoursMinutes(starvationHours)
+        : "✅ Sem Risco de Parada (Abastecimento Garantido)",
   };
+
 }
 
 export const fmt = (value: number, digits = 0) =>

@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import {
   Area,
-  AreaChart,
   CartesianGrid,
+  ComposedChart,
   Legend,
   Line,
   LineChart,
@@ -13,6 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+
 import { Activity } from "lucide-react";
 
 import { Label } from "@/components/ui/label";
@@ -27,7 +28,14 @@ import {
 import type { Unit, UnitMetrics } from "@/lib/canepulse";
 import { WEATHER_CODES, fmt, siglaLabel } from "@/lib/canepulse";
 
-type Point = { hour: string; rate: number; codes: { front: string; code: string }[] };
+type Point = {
+  hour: string;
+  rate: number;
+  stock3h: number;
+  lowBuffer: boolean;
+  codes: { front: string; code: string }[];
+};
+
 
 const SERIES_TOKENS = [
   "var(--color-chart-1)",
@@ -78,14 +86,25 @@ export function HourlyRhythmChart({
   const data: Point[] = useMemo(() => {
     const density = unit.density || 0;
     const fronts = selected === "all" ? unit.fronts.map((f) => f.number) : [selected];
-    return unit.hours.map((row) => ({
-      hour: row.hour,
-      rate: fronts.reduce((s, n) => s + (row.counts[n] ?? 0), 0) * density,
-      codes: fronts
-        .map((n) => ({ front: n, code: row.codes?.[n] ?? "" }))
-        .filter((c) => c.code),
-    }));
-  }, [unit, selected]);
+    const buffer = metrics.hourlyTarget * 2;
+    let cumulative = metrics.initialTonnes;
+    let inflowSum = 0;
+    return unit.hours.map((row, i) => {
+      const rate = fronts.reduce((s, n) => s + (row.counts[n] ?? 0), 0) * density;
+      inflowSum += rate;
+      cumulative += rate - metaLine;
+      const avgInflow = inflowSum / (i + 1);
+      const stock3h = cumulative + (avgInflow - metaLine) * 3;
+      return {
+        hour: row.hour,
+        rate,
+        stock3h,
+        lowBuffer: stock3h < buffer,
+        codes: fronts.map((n) => ({ front: n, code: row.codes?.[n] ?? "" })).filter((c) => c.code),
+      };
+    });
+  }, [unit, selected, metaLine, metrics.hourlyTarget, metrics.initialTonnes]);
+
 
   /** Eixo consolidado (07h→24h + horas extras vistas nas planilhas). */
   const axis = useMemo(() => {
@@ -138,7 +157,14 @@ export function HourlyRhythmChart({
           comparableUnits.map((u) => (typeof p[u.id] === "number" ? (p[u.id] as number) : 0)),
         ),
       )
-    : Math.max(potentialLine, metaLine, ...data.map((d) => d.rate), 1);
+    : Math.max(
+        potentialLine,
+        metaLine,
+        ...data.map((d) => d.rate),
+        ...data.map((d) => d.stock3h),
+        1,
+      );
+
 
   const bands = weatherBands.map((b) => (
     <ReferenceArea
@@ -239,7 +265,7 @@ export function HourlyRhythmChart({
               ))}
             </LineChart>
           ) : (
-            <AreaChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+            <ComposedChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="rhythmFill" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="var(--color-chart-1)" stopOpacity={0.45} />
@@ -261,7 +287,16 @@ export function HourlyRhythmChart({
                 width={52}
               />
               {bands}
-              <Tooltip content={<RhythmTooltip meta={metaLine} potential={potentialLine} />} />
+              <Tooltip
+                content={
+                  <RhythmTooltip
+                    meta={metaLine}
+                    potential={potentialLine}
+                    buffer={metrics.hourlyTarget * 2}
+                  />
+                }
+              />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
               <ReferenceLine
                 y={metaLine}
                 stroke="var(--color-chart-2)"
@@ -287,16 +322,55 @@ export function HourlyRhythmChart({
               <Area
                 type="monotone"
                 dataKey="rate"
+                name="Ritmo Real (t/h)"
                 stroke="var(--color-chart-1)"
                 strokeWidth={2}
                 fill="url(#rhythmFill)"
                 activeDot={{ r: 4, fill: "var(--color-chart-1)" }}
               />
-            </AreaChart>
+              <Line
+                type="monotone"
+                dataKey="stock3h"
+                name="Progressão de Estoque (+3h)"
+                stroke="var(--color-chart-5)"
+                strokeWidth={2}
+                strokeDasharray="4 4"
+                dot={<StockDot buffer={metrics.hourlyTarget * 2} />}
+                activeDot={{ r: 4 }}
+                connectNulls
+              />
+            </ComposedChart>
+
           )}
         </ResponsiveContainer>
       </div>
     </div>
+  );
+}
+
+/** Marcador do estoque projetado: vermelho quando abaixo do buffer de 2h de moagem. */
+function StockDot({
+  cx,
+  cy,
+  payload,
+  buffer,
+}: {
+  cx?: number;
+  cy?: number;
+  payload?: Point;
+  buffer: number;
+}) {
+  if (cx == null || cy == null || !payload) return null;
+  const low = payload.stock3h < buffer;
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={low ? 5 : 3}
+      fill={low ? "var(--color-destructive)" : "var(--color-chart-5)"}
+      stroke={low ? "var(--color-destructive)" : "none"}
+      strokeWidth={low ? 2 : 0}
+    />
   );
 }
 
@@ -306,12 +380,14 @@ function RhythmTooltip({
   label,
   meta,
   potential,
+  buffer,
 }: {
   active?: boolean;
   payload?: { payload: Point }[];
   label?: string;
   meta: number;
   potential: number;
+  buffer: number;
 }) {
   if (!active || !payload?.length) return null;
   const point = payload[0]?.payload;
@@ -325,6 +401,14 @@ function RhythmTooltip({
       <p className="num mt-0.5 text-[11px] text-muted-foreground">
         Meta {fmt(meta, 1)} · Potencial {fmt(potential, 1)} t/h
       </p>
+      <p
+        className={`num mt-1 text-[11px] font-medium ${
+          point.stock3h < buffer ? "text-destructive" : "text-muted-foreground"
+        }`}
+      >
+        Estoque projetado +3h: {fmt(point.stock3h, 1)} t
+        {point.stock3h < buffer ? ` · abaixo do buffer de ${fmt(buffer, 1)} t` : ""}
+      </p>
       {below ? (
         <p className="num mt-1 text-[11px] font-medium text-destructive">
           −{fmt(meta - point.rate, 1)} t/h vs meta
@@ -332,6 +416,7 @@ function RhythmTooltip({
       ) : (
         <p className="mt-1 text-[11px] font-medium text-success">Acima da meta horária</p>
       )}
+
       {point.codes.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-1">
           {point.codes.map((c) => (
