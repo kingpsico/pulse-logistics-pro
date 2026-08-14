@@ -1,4 +1,4 @@
-import { Activity, ShieldCheck } from "lucide-react";
+import { Activity } from "lucide-react";
 
 export function TopBar() {
   return (
@@ -13,11 +13,8 @@ export function TopBar() {
             <span className="text-muted-foreground"> — Diogo Mendes | Análise Logística</span>
           </span>
         </div>
-        <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-          <ShieldCheck className="h-3 w-3 text-primary" />
-          Logged: Diogo Mendes
-        </span>
       </div>
     </header>
   );
 }
+
