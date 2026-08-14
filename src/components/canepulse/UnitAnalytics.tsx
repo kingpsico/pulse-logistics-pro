@@ -93,7 +93,34 @@ export function UnitAnalytics({ unit, metrics, onJustify, allUnits }: Props) {
         </div>
       </div>
 
+      <div
+        className={`surface-panel rounded-xl border p-5 ${
+          metrics.starvationRisk ? "border-destructive/70 bg-destructive/5" : "border-success/50"
+        }`}
+      >
+        <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
+          <Clock4
+            className={`h-4 w-4 ${metrics.starvationRisk ? "text-destructive" : "text-success"}`}
+          />
+          ⏱️ Previsão de Parada Industrial
+        </div>
+        <p
+          className={`num mt-2 font-display text-3xl font-semibold ${
+            metrics.starvationRisk ? "text-destructive" : "text-success"
+          }`}
+        >
+          {metrics.starvationLabel}
+        </p>
+        <p className="num mt-1 text-[11px] text-muted-foreground">
+          Meta {fmt(unit.dailyTarget)} t · Projetado {fmt(metrics.projectedTotalDelivery)} t ·{" "}
+          {metrics.totalDeficit > 0
+            ? `Déficit ${fmt(metrics.totalDeficit)} t ÷ ${fmt(metrics.hourlyTarget, 1)} t/h`
+            : `Superávit ${fmt(Math.abs(metrics.totalDeficit))} t`}
+        </p>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+
         <Metric
           icon={<Gauge className="h-4 w-4" />}
           label="Moagem Real (t/h)"
