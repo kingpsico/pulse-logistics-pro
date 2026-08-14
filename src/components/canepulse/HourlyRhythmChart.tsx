@@ -264,7 +264,7 @@ export function HourlyRhythmChart({
               ))}
             </LineChart>
           ) : (
-            <AreaChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+            <ComposedChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="rhythmFill" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="var(--color-chart-1)" stopOpacity={0.45} />
@@ -286,7 +286,16 @@ export function HourlyRhythmChart({
                 width={52}
               />
               {bands}
-              <Tooltip content={<RhythmTooltip meta={metaLine} potential={potentialLine} />} />
+              <Tooltip
+                content={
+                  <RhythmTooltip
+                    meta={metaLine}
+                    potential={potentialLine}
+                    buffer={metrics.hourlyTarget * 2}
+                  />
+                }
+              />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
               <ReferenceLine
                 y={metaLine}
                 stroke="var(--color-chart-2)"
@@ -312,12 +321,25 @@ export function HourlyRhythmChart({
               <Area
                 type="monotone"
                 dataKey="rate"
+                name="Ritmo Real (t/h)"
                 stroke="var(--color-chart-1)"
                 strokeWidth={2}
                 fill="url(#rhythmFill)"
                 activeDot={{ r: 4, fill: "var(--color-chart-1)" }}
               />
-            </AreaChart>
+              <Line
+                type="monotone"
+                dataKey="stock3h"
+                name="Progressão de Estoque (+3h)"
+                stroke="var(--color-chart-5)"
+                strokeWidth={2}
+                strokeDasharray="4 4"
+                dot={<StockDot buffer={metrics.hourlyTarget * 2} />}
+                activeDot={{ r: 4 }}
+                connectNulls
+              />
+            </ComposedChart>
+
           )}
         </ResponsiveContainer>
       </div>
