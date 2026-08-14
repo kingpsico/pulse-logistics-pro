@@ -156,7 +156,14 @@ export function HourlyRhythmChart({
           comparableUnits.map((u) => (typeof p[u.id] === "number" ? (p[u.id] as number) : 0)),
         ),
       )
-    : Math.max(potentialLine, metaLine, ...data.map((d) => d.rate), 1);
+    : Math.max(
+        potentialLine,
+        metaLine,
+        ...data.map((d) => d.rate),
+        ...data.map((d) => d.stock3h),
+        1,
+      );
+
 
   const bands = weatherBands.map((b) => (
     <ReferenceArea
