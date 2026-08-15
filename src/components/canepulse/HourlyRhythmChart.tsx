@@ -210,8 +210,9 @@ export function HourlyRhythmChart({
     : Math.max(
         potentialLine,
         metaLine,
-        ...data.map((d) => d.rate),
-        ...data.map((d) => d.stock4h),
+        ...data.map((d) => d.rate ?? 0),
+        ...data.map((d) => d.stock4h ?? 0),
+
         1,
       );
 
