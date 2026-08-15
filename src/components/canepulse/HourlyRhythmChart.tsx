@@ -31,8 +31,10 @@ import { WEATHER_CODES, fmt, siglaLabel } from "@/lib/canepulse";
 type Point = {
   hour: string;
   rate: number;
-  stock3h: number;
+  stock4h: number;
   lowBuffer: boolean;
+  depleted: boolean;
+  inflowAvg3h: number;
   codes: { front: string; code: string }[];
 };
 
@@ -88,18 +90,27 @@ export function HourlyRhythmChart({
     const fronts = selected === "all" ? unit.fronts.map((f) => f.number) : [selected];
     const buffer = metrics.hourlyTarget * 2;
     let cumulative = metrics.initialTonnes;
-    let inflowSum = 0;
-    return unit.hours.map((row, i) => {
+    const rates: number[] = [];
+    return unit.hours.map((row) => {
       const rate = fronts.reduce((s, n) => s + (row.counts[n] ?? 0), 0) * density;
-      inflowSum += rate;
+      rates.push(rate);
       cumulative += rate - metaLine;
-      const avgInflow = inflowSum / (i + 1);
-      const stock3h = cumulative + (avgInflow - metaLine) * 3;
+      /** Média de entrada móvel das últimas 3 horas. */
+      const window = rates.slice(-3);
+      const inflowAvg3h = window.reduce((s, r) => s + r, 0) / window.length;
+      const step = inflowAvg3h - metaLine;
+      /** Projeção cumulativa hora a hora: T1 → T4. */
+      const stockT1 = cumulative + step;
+      const stockT2 = stockT1 + step;
+      const stockT3 = stockT2 + step;
+      const stockT4 = stockT3 + step;
       return {
         hour: row.hour,
         rate,
-        stock3h,
-        lowBuffer: stock3h < buffer,
+        stock4h: stockT4,
+        inflowAvg3h,
+        depleted: stockT4 <= 0,
+        lowBuffer: stockT4 < buffer,
         codes: fronts.map((n) => ({ front: n, code: row.codes?.[n] ?? "" })).filter((c) => c.code),
       };
     });
@@ -161,7 +172,7 @@ export function HourlyRhythmChart({
         potentialLine,
         metaLine,
         ...data.map((d) => d.rate),
-        ...data.map((d) => d.stock3h),
+        ...data.map((d) => d.stock4h),
         1,
       );
 
@@ -330,8 +341,8 @@ export function HourlyRhythmChart({
               />
               <Line
                 type="monotone"
-                dataKey="stock3h"
-                name="Progressão de Estoque (+3h)"
+                dataKey="stock4h"
+                name="Progressão de Estoque (+4h)"
                 stroke="var(--color-chart-5)"
                 strokeWidth={2}
                 strokeDasharray="4 4"
@@ -361,15 +372,16 @@ function StockDot({
   buffer: number;
 }) {
   if (cx == null || cy == null || !payload) return null;
-  const low = payload.stock3h < buffer;
+  const low = payload.stock4h < buffer;
+  const dead = payload.depleted;
   return (
     <circle
       cx={cx}
       cy={cy}
-      r={low ? 5 : 3}
-      fill={low ? "var(--color-destructive)" : "var(--color-chart-5)"}
-      stroke={low ? "var(--color-destructive)" : "none"}
-      strokeWidth={low ? 2 : 0}
+      r={dead ? 6 : low ? 5 : 3}
+      fill={low || dead ? "var(--color-destructive)" : "var(--color-chart-5)"}
+      stroke={low || dead ? "var(--color-destructive)" : "none"}
+      strokeWidth={dead ? 3 : low ? 2 : 0}
     />
   );
 }
@@ -403,11 +415,18 @@ function RhythmTooltip({
       </p>
       <p
         className={`num mt-1 text-[11px] font-medium ${
-          point.stock3h < buffer ? "text-destructive" : "text-muted-foreground"
+          point.stock4h < buffer ? "text-destructive" : "text-muted-foreground"
         }`}
       >
-        Estoque projetado +3h: {fmt(point.stock3h, 1)} t
-        {point.stock3h < buffer ? ` · abaixo do buffer de ${fmt(buffer, 1)} t` : ""}
+        Estoque projetado +4h: {fmt(point.stock4h, 1)} t
+        {point.depleted
+          ? " · 🚨 pátio zerado"
+          : point.stock4h < buffer
+            ? ` · abaixo do buffer de ${fmt(buffer, 1)} t`
+            : ""}
+      </p>
+      <p className="num mt-0.5 text-[11px] text-muted-foreground">
+        Média de entrada móvel 3h: {fmt(point.inflowAvg3h, 1)} t/h
       </p>
       {below ? (
         <p className="num mt-1 text-[11px] font-medium text-destructive">
