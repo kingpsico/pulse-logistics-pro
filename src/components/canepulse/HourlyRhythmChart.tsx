@@ -30,11 +30,12 @@ import { WEATHER_CODES, fmt, siglaLabel } from "@/lib/canepulse";
 
 type Point = {
   hour: string;
-  rate: number;
-  stock4h: number;
+  rate: number | null;
+  stock4h: number | null;
   lowBuffer: boolean;
   depleted: boolean;
   inflowAvg3h: number;
+  forecast: boolean;
   codes: { front: string; code: string }[];
 };
 
@@ -47,10 +48,22 @@ const SERIES_TOKENS = [
   "var(--color-chart-5)",
 ];
 
-/** Eixo temporal padrão 07h → 24h para benchmarking entre usinas. */
-const BASE_AXIS = Array.from({ length: 18 }, (_, i) => `${String((i + 7) % 24).padStart(2, "0")}:00`);
+/** Turno operacional canavieiro: 07h → 06h do dia seguinte (ordem cronológica real). */
+const SHIFT_AXIS = Array.from(
+  { length: 24 },
+  (_, i) => `${String((i + 7) % 24).padStart(2, "0")}:00`,
+);
+const BASE_AXIS = SHIFT_AXIS;
+
+/** Índice cronológico dentro do turno (07h = 0 … 06h = 23). */
+const shiftIndex = (hour: string) => {
+  const h = Number(String(hour).slice(0, 2));
+  if (!Number.isFinite(h)) return 999;
+  return (h - 7 + 24) % 24;
+};
 
 const isWeather = (code: string) => WEATHER_CODES.includes(code.toUpperCase() as never);
+
 
 /** Ritmo horário (t/h) com Meta/Potencial, sombreamento climático e comparação de usinas. */
 export function HourlyRhythmChart({
