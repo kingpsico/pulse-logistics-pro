@@ -29,6 +29,7 @@ import type { Unit, UnitMetrics } from "@/lib/canepulse";
 import { WEATHER_CODES, fmt, siglaLabel } from "@/lib/canepulse";
 
 type Point = {
+  idx: number;
   hour: string;
   rate: number | null;
   stock4h: number | null;
@@ -39,7 +40,6 @@ type Point = {
   codes: { front: string; code: string }[];
 };
 
-
 const SERIES_TOKENS = [
   "var(--color-chart-1)",
   "var(--color-chart-2)",
@@ -49,21 +49,19 @@ const SERIES_TOKENS = [
 ];
 
 /** Turno operacional canavieiro: 07h → 06h do dia seguinte (ordem cronológica real). */
-const SHIFT_AXIS = Array.from(
-  { length: 24 },
-  (_, i) => `${String((i + 7) % 24).padStart(2, "0")}:00`,
-);
-const BASE_AXIS = SHIFT_AXIS;
+const SHIFT_HOURS = Array.from({ length: 24 }, (_, i) => (i + 7) % 24);
+/** Rótulo único e padronizado para todo o eixo: "07h", "17h", "00h", "06h". */
+const hourLabel = (h: number) => `${String(h).padStart(2, "0")}h`;
+const AXIS_TICKS = SHIFT_HOURS.map((_, i) => i);
 
 /** Índice cronológico dentro do turno (07h = 0 … 06h = 23). */
 const shiftIndex = (hour: string) => {
   const h = Number(String(hour).slice(0, 2));
-  if (!Number.isFinite(h)) return 999;
+  if (!Number.isFinite(h)) return -1;
   return (h - 7 + 24) % 24;
 };
 
 const isWeather = (code: string) => WEATHER_CODES.includes(code.toUpperCase() as never);
-
 
 /** Ritmo horário (t/h) com Meta/Potencial, sombreamento climático e comparação de usinas. */
 export function HourlyRhythmChart({
@@ -103,7 +101,9 @@ export function HourlyRhythmChart({
     const fronts = selected === "all" ? unit.fronts.map((f) => f.number) : [selected];
     const buffer = metrics.hourlyTarget * 2;
     /** Ordena cronologicamente no turno 07h → 06h antes de renderizar. */
-    const rows = [...unit.hours].sort((a, b) => shiftIndex(a.hour) - shiftIndex(b.hour));
+    const rows = [...unit.hours]
+      .filter((r) => shiftIndex(r.hour) >= 0)
+      .sort((a, b) => shiftIndex(a.hour) - shiftIndex(b.hour));
     let cumulative = metrics.initialTonnes;
     const rates: number[] = [];
 
@@ -113,8 +113,10 @@ export function HourlyRhythmChart({
       cumulative += rate - metaLine;
       const window = rates.slice(-3);
       const inflowAvg3h = window.reduce((s, r) => s + r, 0) / window.length;
+      const idx = shiftIndex(row.hour);
       return {
-        hour: row.hour,
+        idx,
+        hour: hourLabel(SHIFT_HOURS[idx]!),
         rate,
         stock4h: null,
         inflowAvg3h,
@@ -129,76 +131,68 @@ export function HourlyRhythmChart({
 
     /** Ancora a linha preditiva na hora ativa (último registro real) para conectar as séries. */
     const last = history[history.length - 1]!;
-    last.stock4h = cumulative;
-    last.lowBuffer = cumulative < buffer;
+    /** Piso lógico: estoque nunca é negativo no gráfico (evita esmagar a escala do eixo Y). */
+    const clamp = (v: number) => Math.max(0, v);
+    last.stock4h = clamp(cumulative);
+    last.lowBuffer = last.stock4h < buffer;
     last.depleted = cumulative <= 0;
 
     const step = last.inflowAvg3h - metaLine;
-    const startIndex = shiftIndex(last.hour);
     let stock = cumulative;
-    const forecast: Point[] = Array.from({ length: 4 }, (_, i) => {
+    const forecast: Point[] = [];
+    for (let i = 1; i <= 4; i++) {
+      const idx = last.idx + i;
+      if (idx > 23) break;
       stock += step;
-      const slot = (startIndex + i + 1) % 24;
-      return {
-        hour: SHIFT_AXIS[slot]!,
+      const shown = clamp(stock);
+      forecast.push({
+        idx,
+        hour: hourLabel(SHIFT_HOURS[idx]!),
         rate: null,
-        stock4h: stock,
+        stock4h: shown,
         inflowAvg3h: last.inflowAvg3h,
         depleted: stock <= 0,
-        lowBuffer: stock < buffer,
+        lowBuffer: shown < buffer,
         forecast: true,
         codes: [],
-      };
-    });
+      });
+    }
 
-    return [...history, ...forecast];
+    return [...history, ...forecast].sort((a, b) => a.idx - b.idx);
   }, [unit, selected, metaLine, metrics.hourlyTarget, metrics.initialTonnes]);
-
-
-  /** Eixo consolidado do turno (07h → 06h + horas extras vistas nas planilhas). */
-  const axis = useMemo(() => {
-    const seen = new Set<string>();
-    comparableUnits.concat(unit).forEach((u) => u.hours.forEach((h) => seen.add(h.hour)));
-    const extras = [...seen].filter((h) => !BASE_AXIS.includes(h)).sort();
-    return [...BASE_AXIS, ...extras];
-  }, [comparableUnits, unit]);
-
 
   const compareData = useMemo(
     () =>
-      axis.map((hour) => {
-        const point: Record<string, string | number | null> = { hour };
+      SHIFT_HOURS.map((h, idx) => {
+        const point: Record<string, string | number | null> = { idx, hour: hourLabel(h) };
         comparableUnits.forEach((u) => {
-          const row = u.hours.find((h) => h.hour === hour);
+          const row = u.hours.find((r) => shiftIndex(r.hour) === idx);
           point[u.id] = row
             ? u.fronts.reduce((s, f) => s + (row.counts[f.number] ?? 0), 0) * (u.density || 0)
             : null;
         });
         return point;
       }),
-    [axis, comparableUnits],
+    [comparableUnits],
   );
 
   /** Faixas horárias com códigos climáticos (CH, CDC, EN) nas frentes ativas. */
   const weatherBands = useMemo(() => {
     const source = compareMode ? comparableUnits : [unit];
-    const axisRef = compareMode ? axis : data.map((d) => d.hour);
-    const flagged = new Set<string>();
+    const flagged = new Set<number>();
     source.forEach((u) => {
       const fronts =
         !compareMode && selected !== "all" ? [selected] : u.fronts.map((f) => f.number);
       u.hours.forEach((row) => {
-        if (fronts.some((n) => isWeather(row.codes?.[n] ?? ""))) flagged.add(row.hour);
+        const idx = shiftIndex(row.hour);
+        if (idx < 0) return;
+        if (fronts.some((n) => isWeather(row.codes?.[n] ?? ""))) flagged.add(idx);
       });
     });
     return [...flagged]
-      .filter((h) => axisRef.includes(h))
-      .map((hour) => {
-        const i = axisRef.indexOf(hour);
-        const next: string = axisRef[i + 1] ?? hour;
-        return { x1: hour, x2: next };
-      });
-  }, [compareMode, comparableUnits, unit, data, axis, selected]);
+      .sort((a, b) => a - b)
+      .map((idx) => ({ x1: Math.max(0, idx - 0.5), x2: Math.min(23, idx + 0.5) }));
+  }, [compareMode, comparableUnits, unit, selected]);
 
   const maxY = compareMode
     ? Math.max(
@@ -212,10 +206,19 @@ export function HourlyRhythmChart({
         metaLine,
         ...data.map((d) => d.rate ?? 0),
         ...data.map((d) => d.stock4h ?? 0),
-
         1,
       );
 
+  const axisProps = {
+    dataKey: "idx",
+    type: "number" as const,
+    domain: [0, 23] as [number, number],
+    ticks: AXIS_TICKS,
+    tickFormatter: (v: number) => hourLabel(SHIFT_HOURS[v] ?? 0),
+    allowDecimals: false,
+    stroke: "var(--color-muted-foreground)",
+    tickLine: false,
+  };
 
   const bands = weatherBands.map((b) => (
     <ReferenceArea
@@ -239,7 +242,7 @@ export function HourlyRhythmChart({
           <h4 className="font-display text-sm font-semibold">Ritmo Horário de Moagem (t/h)</h4>
           <p className="text-[11px] text-muted-foreground">
             {compareMode
-              ? "Benchmark entre usinas no eixo 07h → 24h. Faixas ambar = horas com clima/condição de canavial."
+              ? "Benchmark entre usinas no turno 07h → 06h. Faixas ambar = horas com clima/condição de canavial."
               : "Curva real por hora com Meta Horária e Potencial das Frentes como referência."}
           </p>
         </div>
@@ -277,13 +280,7 @@ export function HourlyRhythmChart({
           {compareMode ? (
             <LineChart data={compareData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
               <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="hour"
-                stroke="var(--color-muted-foreground)"
-                tick={{ fontSize: 10 }}
-                tickLine={false}
-                interval={0}
-              />
+              <XAxis {...axisProps} tick={{ fontSize: 10 }} interval={0} />
               <YAxis
                 stroke="var(--color-muted-foreground)"
                 tick={{ fontSize: 11 }}
@@ -299,6 +296,7 @@ export function HourlyRhythmChart({
                   borderRadius: 10,
                   fontSize: 12,
                 }}
+                labelFormatter={(v: number) => hourLabel(SHIFT_HOURS[v] ?? 0)}
                 formatter={(value: number) => `${fmt(value, 1)} t/h`}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -324,17 +322,13 @@ export function HourlyRhythmChart({
                 </linearGradient>
               </defs>
               <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="hour"
-                stroke="var(--color-muted-foreground)"
-                tick={{ fontSize: 11 }}
-                tickLine={false}
-              />
+              <XAxis {...axisProps} tick={{ fontSize: 10 }} interval={0} />
               <YAxis
                 stroke="var(--color-muted-foreground)"
                 tick={{ fontSize: 11 }}
                 tickLine={false}
                 domain={[0, Math.ceil(maxY * 1.15)]}
+                allowDataOverflow={false}
                 width={52}
               />
               {bands}
@@ -391,7 +385,6 @@ export function HourlyRhythmChart({
                 connectNulls
               />
             </ComposedChart>
-
           )}
         </ResponsiveContainer>
       </div>
@@ -429,14 +422,12 @@ function StockDot({
 function RhythmTooltip({
   active,
   payload,
-  label,
   meta,
   potential,
   buffer,
 }: {
   active?: boolean;
   payload?: { payload: Point }[];
-  label?: string;
   meta: number;
   potential: number;
   buffer: number;
@@ -451,7 +442,7 @@ function RhythmTooltip({
   return (
     <div className="rounded-lg border border-border/70 bg-card/95 px-3 py-2.5 shadow-lg backdrop-blur">
       <p className="font-display text-xs font-semibold">
-        {label}
+        {point.hour}
         {point.forecast ? " · projeção" : ""}
       </p>
       {rate != null ? (
@@ -486,7 +477,6 @@ function RhythmTooltip({
       ) : (
         <p className="mt-1 text-[11px] font-medium text-success">Acima da meta horária</p>
       )}
-
 
       {point.codes.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-1">
