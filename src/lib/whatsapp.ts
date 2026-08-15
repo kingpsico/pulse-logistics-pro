@@ -37,6 +37,21 @@ export function buildWhatsAppReport(
 
     blocks.push(
       [
+        "⚠️ *ALERTA DE ABASTECIMENTO (PREDITIVO)*",
+        `• Ritmo de Perda/Ganho do Pátio: ${metrics.yardRate < 0 ? "📉" : "📈"} ${signed(
+          metrics.yardRate,
+          1,
+        )} t/h`,
+        `• ⏱️ Previsão de Parada Industrial: ${
+          metrics.starvationRisk
+            ? `${metrics.starvationLabel} por Falta de Cana`
+            : metrics.starvationLabel
+        }`,
+      ].join("\n"),
+    );
+
+    blocks.push(
+      [
         "📈 *PROJEÇÕES*",
         `• Potencial das frentes: ${fmt(metrics.potentialRatePerHour, 1)} t/h`,
         `• Real das frentes: ${fmt(metrics.realRatePerHour, 1)} t/h`,

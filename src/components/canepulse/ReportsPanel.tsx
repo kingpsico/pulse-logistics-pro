@@ -233,6 +233,29 @@ function ReportCard({
         </div>
       ) : null}
 
+      {/* Predictive supply alert */}
+      <div className="border-t border-border/60 px-6 py-5">
+        <h5 className="text-[11px] uppercase tracking-[0.18em] text-warning">
+          ⚠️ Alerta de Abastecimento (Preditivo)
+        </h5>
+        <ul className="mt-3 space-y-1.5 text-sm">
+          <li className="num">
+            <span className="text-muted-foreground">• Ritmo de Perda/Ganho do Pátio: </span>
+            <span className={metrics.yardRate < 0 ? "font-semibold text-destructive" : "font-semibold text-success"}>
+              {metrics.yardRate < 0 ? "📉" : "📈"} {signed(metrics.yardRate, 1)} t/h
+            </span>
+          </li>
+          <li>
+            <span className="text-muted-foreground">• ⏱️ Previsão de Parada Industrial: </span>
+            <span className={metrics.starvationRisk ? "font-semibold text-destructive" : "font-semibold text-success"}>
+              {metrics.starvationRisk
+                ? `${metrics.starvationLabel} por Falta de Cana`
+                : metrics.starvationLabel}
+            </span>
+          </li>
+        </ul>
+      </div>
+
       {/* Performance loss table */}
       <div className="px-6 py-5">
         <h5 className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
