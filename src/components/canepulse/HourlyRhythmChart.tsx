@@ -30,11 +30,12 @@ import { WEATHER_CODES, fmt, siglaLabel } from "@/lib/canepulse";
 
 type Point = {
   hour: string;
-  rate: number;
-  stock4h: number;
+  rate: number | null;
+  stock4h: number | null;
   lowBuffer: boolean;
   depleted: boolean;
   inflowAvg3h: number;
+  forecast: boolean;
   codes: { front: string; code: string }[];
 };
 
@@ -47,10 +48,22 @@ const SERIES_TOKENS = [
   "var(--color-chart-5)",
 ];
 
-/** Eixo temporal padrão 07h → 24h para benchmarking entre usinas. */
-const BASE_AXIS = Array.from({ length: 18 }, (_, i) => `${String((i + 7) % 24).padStart(2, "0")}:00`);
+/** Turno operacional canavieiro: 07h → 06h do dia seguinte (ordem cronológica real). */
+const SHIFT_AXIS = Array.from(
+  { length: 24 },
+  (_, i) => `${String((i + 7) % 24).padStart(2, "0")}:00`,
+);
+const BASE_AXIS = SHIFT_AXIS;
+
+/** Índice cronológico dentro do turno (07h = 0 … 06h = 23). */
+const shiftIndex = (hour: string) => {
+  const h = Number(String(hour).slice(0, 2));
+  if (!Number.isFinite(h)) return 999;
+  return (h - 7 + 24) % 24;
+};
 
 const isWeather = (code: string) => WEATHER_CODES.includes(code.toUpperCase() as never);
+
 
 /** Ritmo horário (t/h) com Meta/Potencial, sombreamento climático e comparação de usinas. */
 export function HourlyRhythmChart({
@@ -89,41 +102,67 @@ export function HourlyRhythmChart({
     const density = unit.density || 0;
     const fronts = selected === "all" ? unit.fronts.map((f) => f.number) : [selected];
     const buffer = metrics.hourlyTarget * 2;
+    /** Ordena cronologicamente no turno 07h → 06h antes de renderizar. */
+    const rows = [...unit.hours].sort((a, b) => shiftIndex(a.hour) - shiftIndex(b.hour));
     let cumulative = metrics.initialTonnes;
     const rates: number[] = [];
-    return unit.hours.map((row) => {
+
+    const history: Point[] = rows.map((row) => {
       const rate = fronts.reduce((s, n) => s + (row.counts[n] ?? 0), 0) * density;
       rates.push(rate);
       cumulative += rate - metaLine;
-      /** Média de entrada móvel das últimas 3 horas. */
       const window = rates.slice(-3);
       const inflowAvg3h = window.reduce((s, r) => s + r, 0) / window.length;
-      const step = inflowAvg3h - metaLine;
-      /** Projeção cumulativa hora a hora: T1 → T4. */
-      const stockT1 = cumulative + step;
-      const stockT2 = stockT1 + step;
-      const stockT3 = stockT2 + step;
-      const stockT4 = stockT3 + step;
       return {
         hour: row.hour,
         rate,
-        stock4h: stockT4,
+        stock4h: null,
         inflowAvg3h,
-        depleted: stockT4 <= 0,
-        lowBuffer: stockT4 < buffer,
+        depleted: false,
+        lowBuffer: false,
+        forecast: false,
         codes: fronts.map((n) => ({ front: n, code: row.codes?.[n] ?? "" })).filter((c) => c.code),
       };
     });
+
+    if (!history.length) return history;
+
+    /** Ancora a linha preditiva na hora ativa (último registro real) para conectar as séries. */
+    const last = history[history.length - 1]!;
+    last.stock4h = cumulative;
+    last.lowBuffer = cumulative < buffer;
+    last.depleted = cumulative <= 0;
+
+    const step = last.inflowAvg3h - metaLine;
+    const startIndex = shiftIndex(last.hour);
+    let stock = cumulative;
+    const forecast: Point[] = Array.from({ length: 4 }, (_, i) => {
+      stock += step;
+      const slot = (startIndex + i + 1) % 24;
+      return {
+        hour: SHIFT_AXIS[slot]!,
+        rate: null,
+        stock4h: stock,
+        inflowAvg3h: last.inflowAvg3h,
+        depleted: stock <= 0,
+        lowBuffer: stock < buffer,
+        forecast: true,
+        codes: [],
+      };
+    });
+
+    return [...history, ...forecast];
   }, [unit, selected, metaLine, metrics.hourlyTarget, metrics.initialTonnes]);
 
 
-  /** Eixo consolidado (07h→24h + horas extras vistas nas planilhas). */
+  /** Eixo consolidado do turno (07h → 06h + horas extras vistas nas planilhas). */
   const axis = useMemo(() => {
     const seen = new Set<string>();
     comparableUnits.concat(unit).forEach((u) => u.hours.forEach((h) => seen.add(h.hour)));
     const extras = [...seen].filter((h) => !BASE_AXIS.includes(h)).sort();
     return [...BASE_AXIS, ...extras];
   }, [comparableUnits, unit]);
+
 
   const compareData = useMemo(
     () =>
@@ -171,8 +210,9 @@ export function HourlyRhythmChart({
     : Math.max(
         potentialLine,
         metaLine,
-        ...data.map((d) => d.rate),
-        ...data.map((d) => d.stock4h),
+        ...data.map((d) => d.rate ?? 0),
+        ...data.map((d) => d.stock4h ?? 0),
+
         1,
       );
 
@@ -371,7 +411,7 @@ function StockDot({
   payload?: Point;
   buffer: number;
 }) {
-  if (cx == null || cy == null || !payload) return null;
+  if (cx == null || cy == null || !payload || payload.stock4h == null) return null;
   const low = payload.stock4h < buffer;
   const dead = payload.depleted;
   return (
@@ -404,37 +444,49 @@ function RhythmTooltip({
   if (!active || !payload?.length) return null;
   const point = payload[0]?.payload;
   if (!point) return null;
-  const below = point.rate < meta;
+  const rate = point.rate;
+  const stock = point.stock4h;
+  const below = rate != null && rate < meta;
 
   return (
     <div className="rounded-lg border border-border/70 bg-card/95 px-3 py-2.5 shadow-lg backdrop-blur">
-      <p className="font-display text-xs font-semibold">{label}</p>
-      <p className="num mt-1 text-sm font-semibold text-chart-1">{fmt(point.rate, 1)} t/h</p>
-      <p className="num mt-0.5 text-[11px] text-muted-foreground">
-        Meta {fmt(meta, 1)} · Potencial {fmt(potential, 1)} t/h
+      <p className="font-display text-xs font-semibold">
+        {label}
+        {point.forecast ? " · projeção" : ""}
       </p>
-      <p
-        className={`num mt-1 text-[11px] font-medium ${
-          point.stock4h < buffer ? "text-destructive" : "text-muted-foreground"
-        }`}
-      >
-        Estoque projetado +4h: {fmt(point.stock4h, 1)} t
-        {point.depleted
-          ? " · 🚨 pátio zerado"
-          : point.stock4h < buffer
-            ? ` · abaixo do buffer de ${fmt(buffer, 1)} t`
-            : ""}
-      </p>
+      {rate != null ? (
+        <>
+          <p className="num mt-1 text-sm font-semibold text-chart-1">{fmt(rate, 1)} t/h</p>
+          <p className="num mt-0.5 text-[11px] text-muted-foreground">
+            Meta {fmt(meta, 1)} · Potencial {fmt(potential, 1)} t/h
+          </p>
+        </>
+      ) : null}
+      {stock != null ? (
+        <p
+          className={`num mt-1 text-[11px] font-medium ${
+            stock < buffer ? "text-destructive" : "text-muted-foreground"
+          }`}
+        >
+          Estoque projetado: {fmt(stock, 1)} t
+          {point.depleted
+            ? " · 🚨 pátio zerado"
+            : stock < buffer
+              ? ` · abaixo do buffer de ${fmt(buffer, 1)} t`
+              : ""}
+        </p>
+      ) : null}
       <p className="num mt-0.5 text-[11px] text-muted-foreground">
         Média de entrada móvel 3h: {fmt(point.inflowAvg3h, 1)} t/h
       </p>
-      {below ? (
+      {rate == null ? null : below ? (
         <p className="num mt-1 text-[11px] font-medium text-destructive">
-          −{fmt(meta - point.rate, 1)} t/h vs meta
+          −{fmt(meta - rate, 1)} t/h vs meta
         </p>
       ) : (
         <p className="mt-1 text-[11px] font-medium text-success">Acima da meta horária</p>
       )}
+
 
       {point.codes.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-1">
