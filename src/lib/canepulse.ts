@@ -151,6 +151,10 @@ export type UnitMetrics = {
   initialTonnes: number;
   totalRealTonnesDay: number;
   realRatePerHour: number; // t/h
+  /** Média de entrada móvel das últimas 3 horas (t/h). */
+  inflowAvg3h: number;
+  /** Ritmo de perda/ganho do pátio = média móvel 3h − meta horária (t/h). */
+  yardRate: number;
   potentialRatePerHour: number; // t/h
   hourlyTarget: number; // t/h target = dailyTarget / 24
   planningBalance24: number; // (potential t/h - target t/h) * 24
@@ -228,6 +232,14 @@ export function computeUnitMetrics(unit: Unit): UnitMetrics {
   const potential24 = potentialRatePerHour * 24;
   const hourlyTarget = (unit.dailyTarget || 0) / 24;
 
+  const lastHours = unit.hours.slice(-3);
+  const inflowAvg3h = lastHours.length
+    ? lastHours.reduce(
+        (s, row) => s + registered.reduce((a, f) => a + (row.counts[f.number] ?? 0), 0) * density,
+        0,
+      ) / lastHours.length
+    : 0;
+
   const projectedTotalDelivery = projection24 + initialTonnes;
   const totalDeficit = (unit.dailyTarget || 0) - projectedTotalDelivery;
   const starvationHours = totalDeficit > 0 ? safeDiv(totalDeficit, hourlyTarget) : 0;
@@ -243,6 +255,8 @@ export function computeUnitMetrics(unit: Unit): UnitMetrics {
     initialTonnes,
     totalRealTonnesDay: initialTonnes + realTonnes,
     realRatePerHour,
+    inflowAvg3h,
+    yardRate: inflowAvg3h - hourlyTarget,
     potentialRatePerHour,
     hourlyTarget,
     planningBalance24: (potentialRatePerHour - hourlyTarget) * 24,
