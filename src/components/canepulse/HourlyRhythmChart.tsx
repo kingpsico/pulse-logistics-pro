@@ -102,41 +102,67 @@ export function HourlyRhythmChart({
     const density = unit.density || 0;
     const fronts = selected === "all" ? unit.fronts.map((f) => f.number) : [selected];
     const buffer = metrics.hourlyTarget * 2;
+    /** Ordena cronologicamente no turno 07h → 06h antes de renderizar. */
+    const rows = [...unit.hours].sort((a, b) => shiftIndex(a.hour) - shiftIndex(b.hour));
     let cumulative = metrics.initialTonnes;
     const rates: number[] = [];
-    return unit.hours.map((row) => {
+
+    const history: Point[] = rows.map((row) => {
       const rate = fronts.reduce((s, n) => s + (row.counts[n] ?? 0), 0) * density;
       rates.push(rate);
       cumulative += rate - metaLine;
-      /** Média de entrada móvel das últimas 3 horas. */
       const window = rates.slice(-3);
       const inflowAvg3h = window.reduce((s, r) => s + r, 0) / window.length;
-      const step = inflowAvg3h - metaLine;
-      /** Projeção cumulativa hora a hora: T1 → T4. */
-      const stockT1 = cumulative + step;
-      const stockT2 = stockT1 + step;
-      const stockT3 = stockT2 + step;
-      const stockT4 = stockT3 + step;
       return {
         hour: row.hour,
         rate,
-        stock4h: stockT4,
+        stock4h: null,
         inflowAvg3h,
-        depleted: stockT4 <= 0,
-        lowBuffer: stockT4 < buffer,
+        depleted: false,
+        lowBuffer: false,
+        forecast: false,
         codes: fronts.map((n) => ({ front: n, code: row.codes?.[n] ?? "" })).filter((c) => c.code),
       };
     });
+
+    if (!history.length) return history;
+
+    /** Ancora a linha preditiva na hora ativa (último registro real) para conectar as séries. */
+    const last = history[history.length - 1]!;
+    last.stock4h = cumulative;
+    last.lowBuffer = cumulative < buffer;
+    last.depleted = cumulative <= 0;
+
+    const step = last.inflowAvg3h - metaLine;
+    const startIndex = shiftIndex(last.hour);
+    let stock = cumulative;
+    const forecast: Point[] = Array.from({ length: 4 }, (_, i) => {
+      stock += step;
+      const slot = (startIndex + i + 1) % 24;
+      return {
+        hour: SHIFT_AXIS[slot]!,
+        rate: null,
+        stock4h: stock,
+        inflowAvg3h: last.inflowAvg3h,
+        depleted: stock <= 0,
+        lowBuffer: stock < buffer,
+        forecast: true,
+        codes: [],
+      };
+    });
+
+    return [...history, ...forecast];
   }, [unit, selected, metaLine, metrics.hourlyTarget, metrics.initialTonnes]);
 
 
-  /** Eixo consolidado (07h→24h + horas extras vistas nas planilhas). */
+  /** Eixo consolidado do turno (07h → 06h + horas extras vistas nas planilhas). */
   const axis = useMemo(() => {
     const seen = new Set<string>();
     comparableUnits.concat(unit).forEach((u) => u.hours.forEach((h) => seen.add(h.hour)));
     const extras = [...seen].filter((h) => !BASE_AXIS.includes(h)).sort();
     return [...BASE_AXIS, ...extras];
   }, [comparableUnits, unit]);
+
 
   const compareData = useMemo(
     () =>
