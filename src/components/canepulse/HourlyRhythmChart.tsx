@@ -32,13 +32,10 @@ type Point = {
   idx: number;
   hour: string;
   rate: number | null;
-  stock4h: number | null;
-  lowBuffer: boolean;
-  depleted: boolean;
   inflowAvg3h: number;
-  forecast: boolean;
   codes: { front: string; code: string }[];
 };
+
 
 const SERIES_TOKENS = [
   "var(--color-chart-1)",
@@ -96,10 +93,9 @@ export function HourlyRhythmChart({
     return metrics.hourlyTarget * ((front.potential || 0) / totalPotential);
   }, [selected, unit.fronts, metrics.hourlyTarget]);
 
-  const data: Point[] = useMemo(() => {
+  const { data, baselineStock } = useMemo(() => {
     const density = unit.density || 0;
     const fronts = selected === "all" ? unit.fronts.map((f) => f.number) : [selected];
-    const buffer = metrics.hourlyTarget * 2;
     /** Ordena cronologicamente no turno 07h → 06h antes de renderizar. */
     const rows = [...unit.hours]
       .filter((r) => shiftIndex(r.hour) >= 0)
@@ -118,48 +114,14 @@ export function HourlyRhythmChart({
         idx,
         hour: hourLabel(SHIFT_HOURS[idx]!),
         rate,
-        stock4h: null,
         inflowAvg3h,
-        depleted: false,
-        lowBuffer: false,
-        forecast: false,
         codes: fronts.map((n) => ({ front: n, code: row.codes?.[n] ?? "" })).filter((c) => c.code),
       };
     });
 
-    if (!history.length) return history;
+    return { data: history, baselineStock: Math.max(0, cumulative) };
+  }, [unit, selected, metaLine, metrics.initialTonnes]);
 
-    /** Ancora a linha preditiva na hora ativa (último registro real) para conectar as séries. */
-    const last = history[history.length - 1]!;
-    /** Piso lógico: estoque nunca é negativo no gráfico (evita esmagar a escala do eixo Y). */
-    const clamp = (v: number) => Math.max(0, v);
-    last.stock4h = clamp(cumulative);
-    last.lowBuffer = last.stock4h < buffer;
-    last.depleted = cumulative <= 0;
-
-    const step = last.inflowAvg3h - metaLine;
-    let stock = cumulative;
-    const forecast: Point[] = [];
-    for (let i = 1; i <= 4; i++) {
-      const idx = last.idx + i;
-      if (idx > 23) break;
-      stock += step;
-      const shown = clamp(stock);
-      forecast.push({
-        idx,
-        hour: hourLabel(SHIFT_HOURS[idx]!),
-        rate: null,
-        stock4h: shown,
-        inflowAvg3h: last.inflowAvg3h,
-        depleted: stock <= 0,
-        lowBuffer: shown < buffer,
-        forecast: true,
-        codes: [],
-      });
-    }
-
-    return [...history, ...forecast].sort((a, b) => a.idx - b.idx);
-  }, [unit, selected, metaLine, metrics.hourlyTarget, metrics.initialTonnes]);
 
   const compareData = useMemo(
     () =>
@@ -205,7 +167,7 @@ export function HourlyRhythmChart({
         potentialLine,
         metaLine,
         ...data.map((d) => d.rate ?? 0),
-        ...data.map((d) => d.stock4h ?? 0),
+        
         1,
       );
 
@@ -333,14 +295,9 @@ export function HourlyRhythmChart({
               />
               {bands}
               <Tooltip
-                content={
-                  <RhythmTooltip
-                    meta={metaLine}
-                    potential={potentialLine}
-                    buffer={metrics.hourlyTarget * 2}
-                  />
-                }
+                content={<RhythmTooltip meta={metaLine} potential={potentialLine} />}
               />
+
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <ReferenceLine
                 y={metaLine}
@@ -373,78 +330,100 @@ export function HourlyRhythmChart({
                 fill="url(#rhythmFill)"
                 activeDot={{ r: 4, fill: "var(--color-chart-1)" }}
               />
-              <Line
-                type="monotone"
-                dataKey="stock4h"
-                name="Progressão de Estoque (+4h)"
-                stroke="var(--color-chart-5)"
-                strokeWidth={2}
-                strokeDasharray="4 4"
-                dot={<StockDot buffer={metrics.hourlyTarget * 2} />}
-                activeDot={{ r: 4 }}
-                connectNulls
-              />
             </ComposedChart>
           )}
         </ResponsiveContainer>
+      </div>
+
+      {!compareMode ? (
+        <StockThermometer
+          baselineStock={baselineStock}
+          inflowAvg3h={metrics.inflowAvg3h}
+          hourlyTarget={metrics.hourlyTarget}
+        />
+      ) : null}
+
+    </div>
+  );
+}
+
+/** Termômetro preditivo: 4 blocos de tendência móvel do estoque de pátio. */
+function StockThermometer({
+  baselineStock,
+  inflowAvg3h,
+  hourlyTarget,
+}: {
+  baselineStock: number;
+  inflowAvg3h: number;
+  hourlyTarget: number;
+}) {
+  const step = inflowAvg3h - hourlyTarget;
+  let stock = baselineStock;
+  const blocks = [1, 2, 3, 4].map((i) => {
+    stock += step;
+    const value = Math.max(0, stock);
+    const tone =
+      value > hourlyTarget * 2
+        ? { label: "🟢 SEGURO", color: "var(--color-chart-1)" }
+        : value >= hourlyTarget
+          ? { label: "🟡 ALERTA BUFFER", color: "var(--color-chart-4)" }
+          : { label: "🔴 RISCO DE PARADA", color: "var(--color-chart-5)" };
+    return { key: `+${i}h`, value, ...tone };
+  });
+
+  return (
+    <div className="mt-6 border-t border-border/70 pt-5">
+      <h5 className="font-display text-sm font-semibold">
+        🌡️ Termômetro Preditivo de Estoque de Pátio (Tendência Móvel)
+      </h5>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        Base: estoque da última hora com dados reais · Média de entrada móvel 3h{" "}
+        {fmt(inflowAvg3h, 1)} t/h · Moagem horária {fmt(hourlyTarget, 1)} t/h
+      </p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {blocks.map((b) => (
+          <div
+            key={b.key}
+            className="rounded-xl border p-4"
+            style={{ borderColor: b.color, background: `color-mix(in oklab, ${b.color} 8%, transparent)` }}
+          >
+            <div className="flex items-center justify-between text-[11px] uppercase tracking-wider text-muted-foreground">
+              <span>{b.key}</span>
+            </div>
+            <p className="num mt-2 font-display text-2xl font-semibold" style={{ color: b.color }}>
+              {fmt(b.value, 1)} t
+            </p>
+            <p className="mt-1 text-[11px] font-medium" style={{ color: b.color }}>
+              {b.label}
+            </p>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-/** Marcador do estoque projetado: vermelho quando abaixo do buffer de 2h de moagem. */
-function StockDot({
-  cx,
-  cy,
-  payload,
-  buffer,
-}: {
-  cx?: number;
-  cy?: number;
-  payload?: Point;
-  buffer: number;
-}) {
-  if (cx == null || cy == null || !payload || payload.stock4h == null) return null;
-  const low = payload.stock4h < buffer;
-  const dead = payload.depleted;
-  return (
-    <circle
-      cx={cx}
-      cy={cy}
-      r={dead ? 6 : low ? 5 : 3}
-      fill={low || dead ? "var(--color-destructive)" : "var(--color-chart-5)"}
-      stroke={low || dead ? "var(--color-destructive)" : "none"}
-      strokeWidth={dead ? 3 : low ? 2 : 0}
-    />
-  );
-}
 
 function RhythmTooltip({
   active,
   payload,
   meta,
   potential,
-  buffer,
 }: {
   active?: boolean;
   payload?: { payload: Point }[];
   meta: number;
   potential: number;
-  buffer: number;
 }) {
   if (!active || !payload?.length) return null;
   const point = payload[0]?.payload;
   if (!point) return null;
   const rate = point.rate;
-  const stock = point.stock4h;
   const below = rate != null && rate < meta;
 
   return (
     <div className="rounded-lg border border-border/70 bg-card/95 px-3 py-2.5 shadow-lg backdrop-blur">
-      <p className="font-display text-xs font-semibold">
-        {point.hour}
-        {point.forecast ? " · projeção" : ""}
-      </p>
+      <p className="font-display text-xs font-semibold">{point.hour}</p>
       {rate != null ? (
         <>
           <p className="num mt-1 text-sm font-semibold text-chart-1">{fmt(rate, 1)} t/h</p>
@@ -453,20 +432,7 @@ function RhythmTooltip({
           </p>
         </>
       ) : null}
-      {stock != null ? (
-        <p
-          className={`num mt-1 text-[11px] font-medium ${
-            stock < buffer ? "text-destructive" : "text-muted-foreground"
-          }`}
-        >
-          Estoque projetado: {fmt(stock, 1)} t
-          {point.depleted
-            ? " · 🚨 pátio zerado"
-            : stock < buffer
-              ? ` · abaixo do buffer de ${fmt(buffer, 1)} t`
-              : ""}
-        </p>
-      ) : null}
+
       <p className="num mt-0.5 text-[11px] text-muted-foreground">
         Média de entrada móvel 3h: {fmt(point.inflowAvg3h, 1)} t/h
       </p>
