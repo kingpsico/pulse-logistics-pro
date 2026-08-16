@@ -295,14 +295,9 @@ export function HourlyRhythmChart({
               />
               {bands}
               <Tooltip
-                content={
-                  <RhythmTooltip
-                    meta={metaLine}
-                    potential={potentialLine}
-                    buffer={metrics.hourlyTarget * 2}
-                  />
-                }
+                content={<RhythmTooltip meta={metaLine} potential={potentialLine} />}
               />
+
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <ReferenceLine
                 y={metaLine}
