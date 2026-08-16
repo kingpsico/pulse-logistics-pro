@@ -167,7 +167,7 @@ export function HourlyRhythmChart({
         potentialLine,
         metaLine,
         ...data.map((d) => d.rate ?? 0),
-        ...data.map((d) => d.stock4h ?? 0),
+        
         1,
       );
 
