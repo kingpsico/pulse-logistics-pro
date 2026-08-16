@@ -32,13 +32,10 @@ type Point = {
   idx: number;
   hour: string;
   rate: number | null;
-  stock4h: number | null;
-  lowBuffer: boolean;
-  depleted: boolean;
   inflowAvg3h: number;
-  forecast: boolean;
   codes: { front: string; code: string }[];
 };
+
 
 const SERIES_TOKENS = [
   "var(--color-chart-1)",
