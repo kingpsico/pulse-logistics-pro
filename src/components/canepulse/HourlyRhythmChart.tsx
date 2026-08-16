@@ -414,27 +414,21 @@ function RhythmTooltip({
   payload,
   meta,
   potential,
-  buffer,
 }: {
   active?: boolean;
   payload?: { payload: Point }[];
   meta: number;
   potential: number;
-  buffer: number;
 }) {
   if (!active || !payload?.length) return null;
   const point = payload[0]?.payload;
   if (!point) return null;
   const rate = point.rate;
-  const stock = point.stock4h;
   const below = rate != null && rate < meta;
 
   return (
     <div className="rounded-lg border border-border/70 bg-card/95 px-3 py-2.5 shadow-lg backdrop-blur">
-      <p className="font-display text-xs font-semibold">
-        {point.hour}
-        {point.forecast ? " · projeção" : ""}
-      </p>
+      <p className="font-display text-xs font-semibold">{point.hour}</p>
       {rate != null ? (
         <>
           <p className="num mt-1 text-sm font-semibold text-chart-1">{fmt(rate, 1)} t/h</p>
@@ -443,20 +437,7 @@ function RhythmTooltip({
           </p>
         </>
       ) : null}
-      {stock != null ? (
-        <p
-          className={`num mt-1 text-[11px] font-medium ${
-            stock < buffer ? "text-destructive" : "text-muted-foreground"
-          }`}
-        >
-          Estoque projetado: {fmt(stock, 1)} t
-          {point.depleted
-            ? " · 🚨 pátio zerado"
-            : stock < buffer
-              ? ` · abaixo do buffer de ${fmt(buffer, 1)} t`
-              : ""}
-        </p>
-      ) : null}
+
       <p className="num mt-0.5 text-[11px] text-muted-foreground">
         Média de entrada móvel 3h: {fmt(point.inflowAvg3h, 1)} t/h
       </p>
