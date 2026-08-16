@@ -392,32 +392,62 @@ export function HourlyRhythmChart({
   );
 }
 
-/** Marcador do estoque projetado: vermelho quando abaixo do buffer de 2h de moagem. */
-function StockDot({
-  cx,
-  cy,
-  payload,
-  buffer,
+/** Termômetro preditivo: 4 blocos de tendência móvel do estoque de pátio. */
+function StockThermometer({
+  baselineStock,
+  inflowAvg3h,
+  hourlyTarget,
 }: {
-  cx?: number;
-  cy?: number;
-  payload?: Point;
-  buffer: number;
+  baselineStock: number;
+  inflowAvg3h: number;
+  hourlyTarget: number;
 }) {
-  if (cx == null || cy == null || !payload || payload.stock4h == null) return null;
-  const low = payload.stock4h < buffer;
-  const dead = payload.depleted;
+  const step = inflowAvg3h - hourlyTarget;
+  let stock = baselineStock;
+  const blocks = [1, 2, 3, 4].map((i) => {
+    stock += step;
+    const value = Math.max(0, stock);
+    const tone =
+      value > hourlyTarget * 2
+        ? { label: "🟢 SEGURO", color: "var(--color-chart-1)" }
+        : value >= hourlyTarget
+          ? { label: "🟡 ALERTA BUFFER", color: "var(--color-chart-4)" }
+          : { label: "🔴 RISCO DE PARADA", color: "var(--color-chart-5)" };
+    return { key: `+${i}h`, value, ...tone };
+  });
+
   return (
-    <circle
-      cx={cx}
-      cy={cy}
-      r={dead ? 6 : low ? 5 : 3}
-      fill={low || dead ? "var(--color-destructive)" : "var(--color-chart-5)"}
-      stroke={low || dead ? "var(--color-destructive)" : "none"}
-      strokeWidth={dead ? 3 : low ? 2 : 0}
-    />
+    <div className="mt-6 border-t border-border/70 pt-5">
+      <h5 className="font-display text-sm font-semibold">
+        🌡️ Termômetro Preditivo de Estoque de Pátio (Tendência Móvel)
+      </h5>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        Base: estoque da última hora com dados reais · Média de entrada móvel 3h{" "}
+        {fmt(inflowAvg3h, 1)} t/h · Moagem horária {fmt(hourlyTarget, 1)} t/h
+      </p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {blocks.map((b) => (
+          <div
+            key={b.key}
+            className="rounded-xl border p-4"
+            style={{ borderColor: b.color, background: `color-mix(in oklab, ${b.color} 8%, transparent)` }}
+          >
+            <div className="flex items-center justify-between text-[11px] uppercase tracking-wider text-muted-foreground">
+              <span>{b.key}</span>
+            </div>
+            <p className="num mt-2 font-display text-2xl font-semibold" style={{ color: b.color }}>
+              {fmt(b.value, 1)} t
+            </p>
+            <p className="mt-1 text-[11px] font-medium" style={{ color: b.color }}>
+              {b.label}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
+
 
 function RhythmTooltip({
   active,
