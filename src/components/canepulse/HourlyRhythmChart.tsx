@@ -373,21 +373,19 @@ export function HourlyRhythmChart({
                 fill="url(#rhythmFill)"
                 activeDot={{ r: 4, fill: "var(--color-chart-1)" }}
               />
-              <Line
-                type="monotone"
-                dataKey="stock4h"
-                name="Progressão de Estoque (+4h)"
-                stroke="var(--color-chart-5)"
-                strokeWidth={2}
-                strokeDasharray="4 4"
-                dot={<StockDot buffer={metrics.hourlyTarget * 2} />}
-                activeDot={{ r: 4 }}
-                connectNulls
-              />
             </ComposedChart>
           )}
         </ResponsiveContainer>
       </div>
+
+      {!compareMode ? (
+        <StockThermometer
+          baselineStock={baselineStock}
+          inflowAvg3h={metrics.inflowAvg3h}
+          hourlyTarget={metrics.hourlyTarget}
+        />
+      ) : null}
+
     </div>
   );
 }
