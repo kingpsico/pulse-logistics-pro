@@ -96,10 +96,9 @@ export function HourlyRhythmChart({
     return metrics.hourlyTarget * ((front.potential || 0) / totalPotential);
   }, [selected, unit.fronts, metrics.hourlyTarget]);
 
-  const data: Point[] = useMemo(() => {
+  const { data, baselineStock } = useMemo(() => {
     const density = unit.density || 0;
     const fronts = selected === "all" ? unit.fronts.map((f) => f.number) : [selected];
-    const buffer = metrics.hourlyTarget * 2;
     /** Ordena cronologicamente no turno 07h → 06h antes de renderizar. */
     const rows = [...unit.hours]
       .filter((r) => shiftIndex(r.hour) >= 0)
@@ -118,48 +117,14 @@ export function HourlyRhythmChart({
         idx,
         hour: hourLabel(SHIFT_HOURS[idx]!),
         rate,
-        stock4h: null,
         inflowAvg3h,
-        depleted: false,
-        lowBuffer: false,
-        forecast: false,
         codes: fronts.map((n) => ({ front: n, code: row.codes?.[n] ?? "" })).filter((c) => c.code),
       };
     });
 
-    if (!history.length) return history;
+    return { data: history, baselineStock: Math.max(0, cumulative) };
+  }, [unit, selected, metaLine, metrics.initialTonnes]);
 
-    /** Ancora a linha preditiva na hora ativa (último registro real) para conectar as séries. */
-    const last = history[history.length - 1]!;
-    /** Piso lógico: estoque nunca é negativo no gráfico (evita esmagar a escala do eixo Y). */
-    const clamp = (v: number) => Math.max(0, v);
-    last.stock4h = clamp(cumulative);
-    last.lowBuffer = last.stock4h < buffer;
-    last.depleted = cumulative <= 0;
-
-    const step = last.inflowAvg3h - metaLine;
-    let stock = cumulative;
-    const forecast: Point[] = [];
-    for (let i = 1; i <= 4; i++) {
-      const idx = last.idx + i;
-      if (idx > 23) break;
-      stock += step;
-      const shown = clamp(stock);
-      forecast.push({
-        idx,
-        hour: hourLabel(SHIFT_HOURS[idx]!),
-        rate: null,
-        stock4h: shown,
-        inflowAvg3h: last.inflowAvg3h,
-        depleted: stock <= 0,
-        lowBuffer: shown < buffer,
-        forecast: true,
-        codes: [],
-      });
-    }
-
-    return [...history, ...forecast].sort((a, b) => a.idx - b.idx);
-  }, [unit, selected, metaLine, metrics.hourlyTarget, metrics.initialTonnes]);
 
   const compareData = useMemo(
     () =>
