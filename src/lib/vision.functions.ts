@@ -16,6 +16,9 @@ Rules:
 - "hour" must be a readable label taken from the sheet (keep the original label).
 - counts keys must be the front numbers exactly as printed (digits only).
 - Cell values are either a number (may be decimal), a code string, or BOTH together (e.g. "1 | CH", "2 - FC", "1 MC"). When a cell mixes a number and a code, return the full text exactly as printed so the engine can keep both.
+- Cells may also be SHARED between mills using shortcodes Ara (Aralco), Gen (Generalco), Fig (Figueira), Alco (Alcoazul),
+  in any order, e.g. "Ara 2 | Gen 1", "2 ARA | 1 GEN", "Fig 1 | Alco 2". Return the full cell text exactly as printed,
+  preserving every mill shortcode and its integer, so the engine can split trucks per mill.
 - Empty or dash cells are 0.
 - Do not invent hours or fronts that are not visible.`;
 
