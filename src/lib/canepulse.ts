@@ -180,10 +180,12 @@ export function cellStatus(raw: string): "number" | "sigla" | "mixed" | "empty" 
   if (!text || /^[-–—\s|/]+$/.test(text)) return "empty";
 
   const upper = text.toUpperCase();
+  if (readMillSplits(upper).length > 0) return "mixed";
   const groups = upper.match(LETTERS_RE) ?? [];
   const hasKnown = groups.some((g) => SIGLAS[g]);
   const hasUnknownLetters = groups.some((g) => !SIGLAS[g]);
   const hasNumber = NUMBER_RE.test(upper);
+
 
   if (hasUnknownLetters) return "suspect";
   if (hasKnown && hasNumber) return "mixed";
