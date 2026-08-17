@@ -4,7 +4,7 @@ import { CheckCircle2, Pencil, TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { HourRow, PendingImport, Unit } from "@/lib/canepulse";
-import { cellStatus, readCell, siglaLabel } from "@/lib/canepulse";
+import { cellStatus, readCellForUnit, siglaLabel, unitMillCode } from "@/lib/canepulse";
 
 type Props = {
   unit: Unit;
@@ -18,6 +18,7 @@ export function OcrReview({ unit, pending, onCancel, onConfirm }: Props) {
   const [rows, setRows] = useState(pending.rows);
   const registered = useMemo(() => new Set(unit.fronts.map((f) => f.number)), [unit.fronts]);
   const columns = pending.fronts;
+  const millCode = useMemo(() => unitMillCode(unit.name), [unit.name]);
 
   const unknown = columns.filter((c) => !registered.has(c));
   const suspects = rows.reduce(
@@ -40,13 +41,15 @@ export function OcrReview({ unit, pending, onCancel, onConfirm }: Props) {
     const hours: HourRow[] = rows.map((row) => {
       const counts: Record<string, number> = {};
       const codes: Record<string, string> = {};
+      const splits: Record<string, string> = {};
       columns.forEach((front) => {
         if (!registered.has(front)) return;
-        const cell = readCell(row.cells[front] ?? "");
+        const cell = readCellForUnit(row.cells[front] ?? "", millCode);
         counts[front] = cell.value;
         if (cell.code) codes[front] = cell.code;
+        if (cell.split) splits[front] = cell.split;
       });
-      return { hour: row.hour, counts, codes };
+      return { hour: row.hour, counts, codes, splits };
     });
     onConfirm(hours, unknown);
   };
@@ -110,7 +113,7 @@ export function OcrReview({ unit, pending, onCancel, onConfirm }: Props) {
                 {columns.map((front) => {
                   const raw = row.cells[front] ?? "";
                   const status = cellStatus(raw);
-                  const parsed = readCell(raw);
+                  const parsed = readCellForUnit(raw, millCode);
                   const flagged = !registered.has(front) || status === "suspect";
                   const coded = status === "sigla" || status === "mixed";
                   return (
@@ -119,9 +122,11 @@ export function OcrReview({ unit, pending, onCancel, onConfirm }: Props) {
                         value={raw}
                         onChange={(e) => setCell(rowIndex, front, e.target.value)}
                         title={
-                          coded && parsed.code
-                            ? `${parsed.value} conj. · ${siglaLabel(parsed.code)}`
-                            : undefined
+                          parsed.split
+                            ? `${parsed.value} conj. nesta usina · ${parsed.split}`
+                            : coded && parsed.code
+                              ? `${parsed.value} conj. · ${siglaLabel(parsed.code)}`
+                              : undefined
                         }
                         className={`num w-16 rounded border bg-transparent px-1.5 py-1 text-right text-xs outline-none focus:border-primary ${
                           flagged

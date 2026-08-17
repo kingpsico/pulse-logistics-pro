@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Unit } from "@/lib/canepulse";
 import { runEngineerCopilot, runSuplyDmgAudit, type AuditItem } from "@/lib/copilots";
+import { GenioCTT } from "@/components/canepulse/GenioCTT";
 
 const ADMIN_USER = "Diogo Mendes";
 const ADMIN_PASS = "diogo1236651";
@@ -112,6 +113,7 @@ function AdminDashboard({ units, onLogout }: { units: Unit[]; onLogout: () => vo
         <TabsList>
           <TabsTrigger value="suply">Suply-DMG</TabsTrigger>
           <TabsTrigger value="dev">Engineer Co-Pilot</TabsTrigger>
+          <TabsTrigger value="genio">🔮 Gênio da CTT</TabsTrigger>
         </TabsList>
 
         <TabsContent value="suply" className="mt-6 space-y-4">
@@ -162,6 +164,9 @@ function AdminDashboard({ units, onLogout }: { units: Unit[]; onLogout: () => vo
               </div>
             </div>
           ))}
+        </TabsContent>
+        <TabsContent value="genio" className="mt-6">
+          <GenioCTT units={units} />
         </TabsContent>
       </Tabs>
     </div>
