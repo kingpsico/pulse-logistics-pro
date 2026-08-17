@@ -9,7 +9,10 @@ export type HourRow = {
   hour: string; // e.g. "06:00"
   counts: Record<string, number>; // front number -> trucks dispatched
   codes?: Record<string, string>; // front number -> operational sigla (CH, FC, ...)
+  /** front number -> texto de frente dividida entre usinas ("🗺️ Frente dividida: ...") */
+  splits?: Record<string, string>;
 };
+
 
 /** Raw OCR extraction awaiting human review before it is merged into the live state. */
 export type PendingRow = { hour: string; cells: Record<string, string> };
