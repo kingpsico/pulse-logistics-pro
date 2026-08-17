@@ -289,6 +289,14 @@ export function computeUnitMetrics(unit: Unit): UnitMetrics {
     });
     const codes = [...byCode.entries()].map(([code, hours]) => ({ code, hours }));
 
+    const splitNotes = [
+      ...new Set(
+        unit.hours
+          .map((row) => row.splits?.[front.number])
+          .filter((n): n is string => Boolean(n)),
+      ),
+    ];
+
     return {
       front,
       real,
@@ -298,8 +306,12 @@ export function computeUnitMetrics(unit: Unit): UnitMetrics {
       realTonnes: real * density,
       lostTonnes: Math.max(0, -delta) * density,
       codes,
-      autoJustification: codes.map((c) => `${siglaLabel(c.code)} (${c.hours.length}h)`).join(" · "),
+      autoJustification: [
+        ...codes.map((c) => `${siglaLabel(c.code)} (${c.hours.length}h)`),
+        ...splitNotes,
+      ].join(" · "),
     };
+
   });
 
   const realTrucks = fronts.reduce((s, f) => s + f.real, 0);
