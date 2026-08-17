@@ -97,7 +97,84 @@ export function readCell(raw: unknown): { value: number; code?: string } {
   return { value: Number.isFinite(value) ? value : 0, ...(code ? { code } : {}) };
 }
 
+/* ============================================================
+ * FRENTES DIVIDIDAS ENTRE USINAS (Ara / Gen / Fig / Alco)
+ * ============================================================ */
+
+export type MillCode = "ARA" | "GEN" | "FIG" | "ALCO";
+
+export const MILLS: { code: MillCode; label: string; aliases: string[] }[] = [
+  { code: "ARA", label: "Aralco", aliases: ["ARA", "ARALCO"] },
+  { code: "GEN", label: "Generalco", aliases: ["GEN", "GENERALCO", "GERALCO"] },
+  { code: "FIG", label: "Figueira", aliases: ["FIG", "FIGUEIRA"] },
+  { code: "ALCO", label: "Alcoazul", aliases: ["ALCO", "ALCOAZUL", "AZUL"] },
+];
+
+const millByAlias = new Map<string, { code: MillCode; label: string }>();
+MILLS.forEach((m) => m.aliases.forEach((a) => millByAlias.set(a, { code: m.code, label: m.label })));
+
+export const millLabel = (code: MillCode) =>
+  MILLS.find((m) => m.code === code)?.label ?? String(code);
+
+/** Descobre o shortcode da usina a partir do nome cadastrado ("Usina Aralco" → ARA). */
+export function unitMillCode(name: string): MillCode | undefined {
+  const upper = String(name ?? "").toUpperCase();
+  const ordered = [
+    ...MILLS.flatMap((m) => m.aliases.filter((a) => a.length > 4).map((a) => [a, m.code] as const)),
+    ...MILLS.map((m) => [m.code, m.code] as const),
+  ];
+  for (const [alias, code] of ordered) if (upper.includes(alias)) return code as MillCode;
+  return undefined;
+}
+
+const PAIR_RE = /([A-Z]+)\s*[:\-]?\s*(\d+(?:[.,]\d+)?)|(\d+(?:[.,]\d+)?)\s*[:\-]?\s*([A-Z]+)/g;
+const toNum = (s: string) => {
+  const n = Number(s.replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+};
+
+/** Extrai pares usina→caminhões de uma célula compartilhada ("Ara 2 | Gen 1", "2 ARA | 1 GEN"). */
+export function readMillSplits(raw: unknown): { code: MillCode; label: string; trucks: number }[] {
+  const upper = String(raw ?? "").toUpperCase();
+  const out: { code: MillCode; label: string; trucks: number }[] = [];
+  for (const match of upper.matchAll(PAIR_RE)) {
+    const letters = match[1] ?? match[4] ?? "";
+    const digits = match[2] ?? match[3] ?? "";
+    const mill = millByAlias.get(letters);
+    if (!mill || !digits) continue;
+    const existing = out.find((o) => o.code === mill.code);
+    if (existing) existing.trucks += toNum(digits);
+    else out.push({ code: mill.code, label: mill.label, trucks: toNum(digits) });
+  }
+  return out;
+}
+
+/**
+ * Leitura contextual por usina. Se a célula contém siglas de usinas, isola apenas os
+ * caminhões da usina atual e transforma os demais em justificativa FDV (frente dividida).
+ */
+export function readCellForUnit(
+  raw: unknown,
+  millCode?: MillCode,
+): { value: number; code?: string; split?: string } {
+  const splits = readMillSplits(raw);
+  if (splits.length === 0) return readCell(raw);
+
+  const mine = millCode ? splits.filter((s) => s.code === millCode) : [];
+  const others = splits.filter((s) => s.code !== millCode);
+  const value = mine.reduce((s, m) => s + m.trucks, 0);
+
+  if (others.length === 0) return { value };
+
+  const note = `${siglaLabel("FDV")}: ${others
+    .map((o) => `${fmt(o.trucks, o.trucks % 1 ? 1 : 0)} conj. enviado para ${o.label}`)
+    .join(" · ")}`;
+
+  return { value, code: "FDV", split: note };
+}
+
 /** Review heuristic: classifies a raw OCR cell for the post-OCR verification grid. */
+
 export function cellStatus(raw: string): "number" | "sigla" | "mixed" | "empty" | "suspect" {
   const text = String(raw ?? "").trim();
   if (!text || /^[-–—\s|/]+$/.test(text)) return "empty";
