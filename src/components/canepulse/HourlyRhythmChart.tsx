@@ -337,6 +337,7 @@ export function HourlyRhythmChart({
               <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
               <XAxis {...axisProps} tick={{ fontSize: 10 }} interval={0} />
               <YAxis
+                yAxisId="left"
                 stroke="var(--color-muted-foreground)"
                 tick={{ fontSize: 11 }}
                 tickLine={false}
@@ -344,6 +345,16 @@ export function HourlyRhythmChart({
                 allowDataOverflow={false}
                 width={52}
               />
+              <YAxis
+                yAxisId="stock"
+                orientation="right"
+                stroke="var(--color-chart-3)"
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                domain={[0, Math.ceil(maxStock * 1.2)]}
+                width={44}
+              />
+
               {bands}
               <Tooltip
                 content={<RhythmTooltip meta={metaLine} potential={potentialLine} />}
