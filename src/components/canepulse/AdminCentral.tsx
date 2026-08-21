@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bot, Copy, Lock, LogOut, ShieldCheck, Terminal, TriangleAlert } from "lucide-react";
+import { Copy, Lock, LogOut, ShieldCheck, Terminal, Trash2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Unit } from "@/lib/canepulse";
-import { runEngineerCopilot, runSuplyDmgAudit, type AuditItem } from "@/lib/copilots";
+import { runEngineerCopilot } from "@/lib/copilots";
 import { GenioCTT } from "@/components/canepulse/GenioCTT";
 
 const ADMIN_USER = "Diogo Mendes";
@@ -92,8 +92,8 @@ function LoginGate({ onSuccess }: { onSuccess: () => void }) {
 }
 
 function AdminDashboard({ units, onLogout }: { units: Unit[]; onLogout: () => void }) {
-  const audit = runSuplyDmgAudit(units);
   const critiques = runEngineerCopilot(units);
+  const [cleared, setCleared] = useState<Record<number, boolean>>({});
 
   return (
     <div className="space-y-6">
@@ -109,24 +109,11 @@ function AdminDashboard({ units, onLogout }: { units: Unit[]; onLogout: () => vo
         </Button>
       </div>
 
-      <Tabs defaultValue="suply">
+      <Tabs defaultValue="dev">
         <TabsList>
-          <TabsTrigger value="suply">Suply-DMG</TabsTrigger>
           <TabsTrigger value="dev">Engineer Co-Pilot</TabsTrigger>
           <TabsTrigger value="genio">🔮 Gênio da CTT</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="suply" className="mt-6 space-y-4">
-          <AgentHeader
-            icon={<Bot className="h-4 w-4" />}
-            name="Suply-DMG"
-            role="Analista sênior de dados em logística canavieira"
-            summary={`${audit.length} achado(s) na varredura das unidades, matrizes horárias e siglas OCR.`}
-          />
-          {audit.map((item, index) => (
-            <AuditCard key={index} item={item} />
-          ))}
-        </TabsContent>
 
         <TabsContent value="dev" className="mt-6 space-y-4">
           <AgentHeader
