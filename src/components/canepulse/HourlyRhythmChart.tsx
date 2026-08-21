@@ -420,28 +420,30 @@ export function HourlyRhythmChart({
   );
 }
 
-/** Termômetro preditivo: 4 blocos de tendência móvel do estoque de pátio. */
+/** Termômetro preditivo: 4 blocos de tendência do estoque de pátio em CONJUNTOS. */
 function StockThermometer({
-  baselineStock,
-  inflowAvg3h,
-  hourlyTarget,
+  blocks,
+  baselineConj,
+  inflowAvgConj,
+  targetConj,
+  phase,
+  density,
 }: {
-  baselineStock: number;
-  inflowAvg3h: number;
-  hourlyTarget: number;
+  blocks: { key: string; value: number }[];
+  baselineConj: number;
+  inflowAvgConj: number;
+  targetConj: number;
+  phase: 1 | 2;
+  density: number;
 }) {
-  const step = inflowAvg3h - hourlyTarget;
-  let stock = baselineStock;
-  const blocks = [1, 2, 3, 4].map((i) => {
-    stock += step;
-    const value = Math.max(0, stock);
+  const toned = blocks.map((b) => {
     const tone =
-      value > hourlyTarget * 2
+      b.value > targetConj * 2
         ? { label: "🟢 SEGURO", color: "var(--color-chart-1)" }
-        : value >= hourlyTarget
+        : b.value >= targetConj
           ? { label: "🟡 ALERTA BUFFER", color: "var(--color-chart-4)" }
           : { label: "🔴 RISCO DE PARADA", color: "var(--color-chart-5)" };
-    return { key: `+${i}h`, value, ...tone };
+    return { ...b, ...tone };
   });
 
   return (
@@ -450,11 +452,15 @@ function StockThermometer({
         🌡️ Termômetro Preditivo de Estoque de Pátio (Tendência Móvel)
       </h5>
       <p className="mt-1 text-[11px] text-muted-foreground">
-        Base: estoque da última hora com dados reais · Média de entrada móvel 3h{" "}
-        {fmt(inflowAvg3h, 1)} t/h · Moagem horária {fmt(hourlyTarget, 1)} t/h
+        {phase === 1
+          ? "Fase 1 (até 3h logadas): acumulado real do turno sobre o estoque inicial"
+          : "Fase 2 (4h+ logadas): projeção pela média móvel de 3h das entradas de campo"}{" "}
+        · Base {fmt(baselineConj, 1)} conj. · Entrada média {fmt(inflowAvgConj, 1)} conj./h · Moagem
+        horária {fmt(targetConj, 1)} conj./h (carga {fmt(density, 1)} t) · Horas com IUP não
+        consomem estoque
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {blocks.map((b) => (
+        {toned.map((b) => (
           <div
             key={b.key}
             className="rounded-xl border p-4"
@@ -464,7 +470,7 @@ function StockThermometer({
               <span>{b.key}</span>
             </div>
             <p className="num mt-2 font-display text-2xl font-semibold" style={{ color: b.color }}>
-              {fmt(b.value, 1)} t
+              {fmt(b.value, 1)} conj.
             </p>
             <p className="mt-1 text-[11px] font-medium" style={{ color: b.color }}>
               {b.label}
@@ -475,6 +481,7 @@ function StockThermometer({
     </div>
   );
 }
+
 
 
 function RhythmTooltip({
