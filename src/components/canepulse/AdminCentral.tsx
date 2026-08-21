@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bot, Copy, Lock, LogOut, ShieldCheck, Terminal, TriangleAlert } from "lucide-react";
+import { Copy, Lock, LogOut, ShieldCheck, Terminal, Trash2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Unit } from "@/lib/canepulse";
-import { runEngineerCopilot, runSuplyDmgAudit, type AuditItem } from "@/lib/copilots";
+import { runEngineerCopilot } from "@/lib/copilots";
 import { GenioCTT } from "@/components/canepulse/GenioCTT";
 
 const ADMIN_USER = "Diogo Mendes";
@@ -92,8 +92,8 @@ function LoginGate({ onSuccess }: { onSuccess: () => void }) {
 }
 
 function AdminDashboard({ units, onLogout }: { units: Unit[]; onLogout: () => void }) {
-  const audit = runSuplyDmgAudit(units);
   const critiques = runEngineerCopilot(units);
+  const [cleared, setCleared] = useState<Record<number, boolean>>({});
 
   return (
     <div className="space-y-6">
@@ -109,24 +109,11 @@ function AdminDashboard({ units, onLogout }: { units: Unit[]; onLogout: () => vo
         </Button>
       </div>
 
-      <Tabs defaultValue="suply">
+      <Tabs defaultValue="dev">
         <TabsList>
-          <TabsTrigger value="suply">Suply-DMG</TabsTrigger>
           <TabsTrigger value="dev">Engineer Co-Pilot</TabsTrigger>
           <TabsTrigger value="genio">🔮 Gênio da CTT</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="suply" className="mt-6 space-y-4">
-          <AgentHeader
-            icon={<Bot className="h-4 w-4" />}
-            name="Suply-DMG"
-            role="Analista sênior de dados em logística canavieira"
-            summary={`${audit.length} achado(s) na varredura das unidades, matrizes horárias e siglas OCR.`}
-          />
-          {audit.map((item, index) => (
-            <AuditCard key={index} item={item} />
-          ))}
-        </TabsContent>
 
         <TabsContent value="dev" className="mt-6 space-y-4">
           <AgentHeader
@@ -143,12 +130,13 @@ function AdminDashboard({ units, onLogout }: { units: Unit[]; onLogout: () => vo
               </h3>
               <p className="mt-2 text-sm text-muted-foreground">{c.critique}</p>
               <div className="mt-4 rounded-lg border border-border/70 bg-secondary/40 p-4">
-                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
                   Prompt pronto para o Lovable
                   <Button
                     size="sm"
                     variant="secondary"
                     className="ml-auto"
+                    disabled={cleared[index]}
                     onClick={() => {
                       navigator.clipboard.writeText(c.prompt);
                       toast.success("Prompt copiado");
@@ -156,12 +144,23 @@ function AdminDashboard({ units, onLogout }: { units: Unit[]; onLogout: () => vo
                   >
                     <Copy className="h-3.5 w-3.5" /> Copiar
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => {
+                      setCleared((prev) => ({ ...prev, [index]: !prev[index] }));
+                      if (!cleared[index]) toast.success("Prompt limpo");
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {cleared[index] ? " Regerar Prompt" : " 🗑️ Limpar Prompt"}
+                  </Button>
                 </div>
-                <p className="mt-2 whitespace-pre-line font-mono text-xs leading-relaxed text-foreground/90">
-                  {c.prompt}
+                <p className="mt-2 min-h-6 whitespace-pre-line font-mono text-xs leading-relaxed text-foreground/90">
+                  {cleared[index] ? "" : c.prompt}
                 </p>
-
               </div>
+
             </div>
           ))}
         </TabsContent>
@@ -196,26 +195,6 @@ function AgentHeader({
         </div>
       </div>
       <p className="mt-3 text-sm text-muted-foreground">{summary}</p>
-    </div>
-  );
-}
-
-const severityStyles: Record<AuditItem["severity"], string> = {
-  critical: "border-destructive/50",
-  risk: "border-amber-500/40",
-  ok: "border-primary/40",
-  info: "border-border/70",
-};
-
-function AuditCard({ item }: { item: AuditItem }) {
-  return (
-    <div className={`surface-panel rounded-xl border p-5 ${severityStyles[item.severity]}`}>
-      <h3 className="font-display text-sm font-semibold">{item.title}</h3>
-      <p className="mt-2 text-sm text-muted-foreground">{item.detail}</p>
-      <p className="mt-3 rounded-lg border border-border/70 bg-secondary/40 p-3 text-sm">
-        <span className="font-semibold text-primary">Ação requerida: </span>
-        {item.action}
-      </p>
     </div>
   );
 }

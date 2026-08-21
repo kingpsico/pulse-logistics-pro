@@ -33,8 +33,13 @@ type Point = {
   hour: string;
   rate: number | null;
   inflowAvg3h: number;
+  /** Estoque de pátio disponível em conjuntos (histórico ou projetado). */
+  stock: number | null;
+  projected?: boolean;
+  iup?: boolean;
   codes: { front: string; code: string }[];
 };
+
 
 
 const SERIES_TOKENS = [
@@ -93,20 +98,28 @@ export function HourlyRhythmChart({
     return metrics.hourlyTarget * ((front.potential || 0) / totalPotential);
   }, [selected, unit.fronts, metrics.hourlyTarget]);
 
-  const { data, baselineStock } = useMemo(() => {
+  const { data, thermo } = useMemo(() => {
     const density = unit.density || 0;
     const fronts = selected === "all" ? unit.fronts.map((f) => f.number) : [selected];
     /** Ordena cronologicamente no turno 07h → 06h antes de renderizar. */
     const rows = [...unit.hours]
       .filter((r) => shiftIndex(r.hour) >= 0)
       .sort((a, b) => shiftIndex(a.hour) - shiftIndex(b.hour));
-    let cumulative = metrics.initialTonnes;
+
+    /** Moagem horária convertida em conjuntos (t/h ÷ carga líquida do caminhão). */
+    const targetConj = density > 0 ? metaLine / density : 0;
+    let stockConj = unit.initialStock || 0;
     const rates: number[] = [];
+    const inflowsConj: number[] = [];
 
     const history: Point[] = rows.map((row) => {
-      const rate = fronts.reduce((s, n) => s + (row.counts[n] ?? 0), 0) * density;
+      const trucks = fronts.reduce((s, n) => s + (row.counts[n] ?? 0), 0);
+      const rate = trucks * density;
       rates.push(rate);
-      cumulative += rate - metaLine;
+      inflowsConj.push(trucks);
+      /** IUP (Indústria/Usina Parada): consumo da moenda forçado a 0 conjuntos naquela hora. */
+      const iup = fronts.some((n) => (row.codes?.[n] ?? "").toUpperCase() === "IUP");
+      stockConj = Math.max(0, stockConj + trucks - (iup ? 0 : targetConj));
       const window = rates.slice(-3);
       const inflowAvg3h = window.reduce((s, r) => s + r, 0) / window.length;
       const idx = shiftIndex(row.hour);
@@ -115,12 +128,50 @@ export function HourlyRhythmChart({
         hour: hourLabel(SHIFT_HOURS[idx]!),
         rate,
         inflowAvg3h,
+        stock: stockConj,
+        iup,
         codes: fronts.map((n) => ({ front: n, code: row.codes?.[n] ?? "" })).filter((c) => c.code),
       };
     });
 
-    return { data: history, baselineStock: Math.max(0, cumulative) };
-  }, [unit, selected, metaLine, metrics.initialTonnes]);
+    /**
+     * Fase 1 (até 3 horas logadas): média de todas as entradas registradas.
+     * Fase 2 (4h ou mais): média móvel das últimas 3 horas de campo.
+     */
+    const phase: 1 | 2 = rows.length >= 4 ? 2 : 1;
+    const windowConj = phase === 2 ? inflowsConj.slice(-3) : inflowsConj;
+    const inflowAvgConj = windowConj.length
+      ? windowConj.reduce((s, v) => s + v, 0) / windowConj.length
+      : 0;
+    const stepConj = inflowAvgConj - targetConj;
+
+    const lastIdx = history.length ? history[history.length - 1]!.idx : -1;
+    let projStock = stockConj;
+    const forecast: Point[] = [];
+    const blocks: { key: string; value: number }[] = [];
+    for (let i = 1; i <= 4; i += 1) {
+      projStock = Math.max(0, projStock + stepConj);
+      blocks.push({ key: `+${i}h`, value: projStock });
+      const idx = lastIdx + i;
+      if (lastIdx >= 0 && idx <= 23) {
+        forecast.push({
+          idx,
+          hour: hourLabel(SHIFT_HOURS[idx]!),
+          rate: null,
+          inflowAvg3h: history[history.length - 1]?.inflowAvg3h ?? 0,
+          stock: projStock,
+          projected: true,
+          codes: [],
+        });
+      }
+    }
+
+    return {
+      data: [...history, ...forecast].sort((a, b) => a.idx - b.idx),
+      thermo: { blocks, baselineConj: stockConj, inflowAvgConj, targetConj, phase, density },
+    };
+  }, [unit, selected, metaLine]);
+
 
 
   const compareData = useMemo(
@@ -170,6 +221,9 @@ export function HourlyRhythmChart({
         
         1,
       );
+
+  const maxStock = Math.max(1, ...data.map((d) => d.stock ?? 0));
+
 
   const axisProps = {
     dataKey: "idx",
@@ -286,6 +340,7 @@ export function HourlyRhythmChart({
               <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
               <XAxis {...axisProps} tick={{ fontSize: 10 }} interval={0} />
               <YAxis
+                yAxisId="left"
                 stroke="var(--color-muted-foreground)"
                 tick={{ fontSize: 11 }}
                 tickLine={false}
@@ -293,6 +348,16 @@ export function HourlyRhythmChart({
                 allowDataOverflow={false}
                 width={52}
               />
+              <YAxis
+                yAxisId="stock"
+                orientation="right"
+                stroke="var(--color-chart-3)"
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                domain={[0, Math.ceil(maxStock * 1.2)]}
+                width={44}
+              />
+
               {bands}
               <Tooltip
                 content={<RhythmTooltip meta={metaLine} potential={potentialLine} />}
@@ -300,6 +365,7 @@ export function HourlyRhythmChart({
 
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <ReferenceLine
+                yAxisId="left"
                 y={metaLine}
                 stroke="var(--color-chart-2)"
                 strokeDasharray="6 4"
@@ -311,6 +377,7 @@ export function HourlyRhythmChart({
                 }}
               />
               <ReferenceLine
+                yAxisId="left"
                 y={potentialLine}
                 stroke="var(--color-chart-1)"
                 strokeDasharray="2 4"
@@ -322,6 +389,7 @@ export function HourlyRhythmChart({
                 }}
               />
               <Area
+                yAxisId="left"
                 type="monotone"
                 dataKey="rate"
                 name="Ritmo Real (t/h)"
@@ -330,45 +398,52 @@ export function HourlyRhythmChart({
                 fill="url(#rhythmFill)"
                 activeDot={{ r: 4, fill: "var(--color-chart-1)" }}
               />
+              <Line
+                yAxisId="stock"
+                type="monotone"
+                dataKey="stock"
+                name="Estoque de Pátio Disponível (Conjuntos)"
+                stroke="var(--color-chart-3)"
+                strokeWidth={2}
+                dot={{ r: 2.5, fill: "var(--color-chart-3)" }}
+                connectNulls
+              />
             </ComposedChart>
           )}
         </ResponsiveContainer>
       </div>
 
-      {!compareMode ? (
-        <StockThermometer
-          baselineStock={baselineStock}
-          inflowAvg3h={metrics.inflowAvg3h}
-          hourlyTarget={metrics.hourlyTarget}
-        />
-      ) : null}
+      {!compareMode ? <StockThermometer {...thermo} /> : null}
+
 
     </div>
   );
 }
 
-/** Termômetro preditivo: 4 blocos de tendência móvel do estoque de pátio. */
+/** Termômetro preditivo: 4 blocos de tendência do estoque de pátio em CONJUNTOS. */
 function StockThermometer({
-  baselineStock,
-  inflowAvg3h,
-  hourlyTarget,
+  blocks,
+  baselineConj,
+  inflowAvgConj,
+  targetConj,
+  phase,
+  density,
 }: {
-  baselineStock: number;
-  inflowAvg3h: number;
-  hourlyTarget: number;
+  blocks: { key: string; value: number }[];
+  baselineConj: number;
+  inflowAvgConj: number;
+  targetConj: number;
+  phase: 1 | 2;
+  density: number;
 }) {
-  const step = inflowAvg3h - hourlyTarget;
-  let stock = baselineStock;
-  const blocks = [1, 2, 3, 4].map((i) => {
-    stock += step;
-    const value = Math.max(0, stock);
+  const toned = blocks.map((b) => {
     const tone =
-      value > hourlyTarget * 2
+      b.value > targetConj * 2
         ? { label: "🟢 SEGURO", color: "var(--color-chart-1)" }
-        : value >= hourlyTarget
+        : b.value >= targetConj
           ? { label: "🟡 ALERTA BUFFER", color: "var(--color-chart-4)" }
           : { label: "🔴 RISCO DE PARADA", color: "var(--color-chart-5)" };
-    return { key: `+${i}h`, value, ...tone };
+    return { ...b, ...tone };
   });
 
   return (
@@ -377,11 +452,15 @@ function StockThermometer({
         🌡️ Termômetro Preditivo de Estoque de Pátio (Tendência Móvel)
       </h5>
       <p className="mt-1 text-[11px] text-muted-foreground">
-        Base: estoque da última hora com dados reais · Média de entrada móvel 3h{" "}
-        {fmt(inflowAvg3h, 1)} t/h · Moagem horária {fmt(hourlyTarget, 1)} t/h
+        {phase === 1
+          ? "Fase 1 (até 3h logadas): acumulado real do turno sobre o estoque inicial"
+          : "Fase 2 (4h+ logadas): projeção pela média móvel de 3h das entradas de campo"}{" "}
+        · Base {fmt(baselineConj, 1)} conj. · Entrada média {fmt(inflowAvgConj, 1)} conj./h · Moagem
+        horária {fmt(targetConj, 1)} conj./h (carga {fmt(density, 1)} t) · Horas com IUP não
+        consomem estoque
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {blocks.map((b) => (
+        {toned.map((b) => (
           <div
             key={b.key}
             className="rounded-xl border p-4"
@@ -391,7 +470,7 @@ function StockThermometer({
               <span>{b.key}</span>
             </div>
             <p className="num mt-2 font-display text-2xl font-semibold" style={{ color: b.color }}>
-              {fmt(b.value, 1)} t
+              {fmt(b.value, 1)} conj.
             </p>
             <p className="mt-1 text-[11px] font-medium" style={{ color: b.color }}>
               {b.label}
@@ -402,6 +481,7 @@ function StockThermometer({
     </div>
   );
 }
+
 
 
 function RhythmTooltip({
@@ -433,9 +513,17 @@ function RhythmTooltip({
         </>
       ) : null}
 
+      {point.stock != null ? (
+        <p className="num mt-1 text-[11px] font-medium text-chart-3">
+          Estoque de pátio: {fmt(point.stock, 1)} conj.
+          {point.projected ? " (projetado)" : ""}
+          {point.iup ? " · IUP: moagem parada" : ""}
+        </p>
+      ) : null}
       <p className="num mt-0.5 text-[11px] text-muted-foreground">
         Média de entrada móvel 3h: {fmt(point.inflowAvg3h, 1)} t/h
       </p>
+
       {rate == null ? null : below ? (
         <p className="num mt-1 text-[11px] font-medium text-destructive">
           −{fmt(meta - rate, 1)} t/h vs meta
