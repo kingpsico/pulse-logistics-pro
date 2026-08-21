@@ -198,23 +198,3 @@ function AgentHeader({
     </div>
   );
 }
-
-const severityStyles: Record<AuditItem["severity"], string> = {
-  critical: "border-destructive/50",
-  risk: "border-amber-500/40",
-  ok: "border-primary/40",
-  info: "border-border/70",
-};
-
-function AuditCard({ item }: { item: AuditItem }) {
-  return (
-    <div className={`surface-panel rounded-xl border p-5 ${severityStyles[item.severity]}`}>
-      <h3 className="font-display text-sm font-semibold">{item.title}</h3>
-      <p className="mt-2 text-sm text-muted-foreground">{item.detail}</p>
-      <p className="mt-3 rounded-lg border border-border/70 bg-secondary/40 p-3 text-sm">
-        <span className="font-semibold text-primary">Ação requerida: </span>
-        {item.action}
-      </p>
-    </div>
-  );
-}
