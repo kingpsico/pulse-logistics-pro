@@ -362,6 +362,7 @@ export function HourlyRhythmChart({
 
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <ReferenceLine
+                yAxisId="left"
                 y={metaLine}
                 stroke="var(--color-chart-2)"
                 strokeDasharray="6 4"
@@ -373,6 +374,7 @@ export function HourlyRhythmChart({
                 }}
               />
               <ReferenceLine
+                yAxisId="left"
                 y={potentialLine}
                 stroke="var(--color-chart-1)"
                 strokeDasharray="2 4"
@@ -384,6 +386,7 @@ export function HourlyRhythmChart({
                 }}
               />
               <Area
+                yAxisId="left"
                 type="monotone"
                 dataKey="rate"
                 name="Ritmo Real (t/h)"
@@ -392,18 +395,23 @@ export function HourlyRhythmChart({
                 fill="url(#rhythmFill)"
                 activeDot={{ r: 4, fill: "var(--color-chart-1)" }}
               />
+              <Line
+                yAxisId="stock"
+                type="monotone"
+                dataKey="stock"
+                name="Estoque de Pátio Disponível (Conjuntos)"
+                stroke="var(--color-chart-3)"
+                strokeWidth={2}
+                dot={{ r: 2.5, fill: "var(--color-chart-3)" }}
+                connectNulls
+              />
             </ComposedChart>
           )}
         </ResponsiveContainer>
       </div>
 
-      {!compareMode ? (
-        <StockThermometer
-          baselineStock={baselineStock}
-          inflowAvg3h={metrics.inflowAvg3h}
-          hourlyTarget={metrics.hourlyTarget}
-        />
-      ) : null}
+      {!compareMode ? <StockThermometer {...thermo} /> : null}
+
 
     </div>
   );
