@@ -98,20 +98,28 @@ export function HourlyRhythmChart({
     return metrics.hourlyTarget * ((front.potential || 0) / totalPotential);
   }, [selected, unit.fronts, metrics.hourlyTarget]);
 
-  const { data, baselineStock } = useMemo(() => {
+  const { data, thermo } = useMemo(() => {
     const density = unit.density || 0;
     const fronts = selected === "all" ? unit.fronts.map((f) => f.number) : [selected];
     /** Ordena cronologicamente no turno 07h → 06h antes de renderizar. */
     const rows = [...unit.hours]
       .filter((r) => shiftIndex(r.hour) >= 0)
       .sort((a, b) => shiftIndex(a.hour) - shiftIndex(b.hour));
-    let cumulative = metrics.initialTonnes;
+
+    /** Moagem horária convertida em conjuntos (t/h ÷ carga líquida do caminhão). */
+    const targetConj = density > 0 ? metaLine / density : 0;
+    let stockConj = unit.initialStock || 0;
     const rates: number[] = [];
+    const inflowsConj: number[] = [];
 
     const history: Point[] = rows.map((row) => {
-      const rate = fronts.reduce((s, n) => s + (row.counts[n] ?? 0), 0) * density;
+      const trucks = fronts.reduce((s, n) => s + (row.counts[n] ?? 0), 0);
+      const rate = trucks * density;
       rates.push(rate);
-      cumulative += rate - metaLine;
+      inflowsConj.push(trucks);
+      /** IUP (Indústria/Usina Parada): consumo da moenda forçado a 0 conjuntos naquela hora. */
+      const iup = fronts.some((n) => (row.codes?.[n] ?? "").toUpperCase() === "IUP");
+      stockConj = Math.max(0, stockConj + trucks - (iup ? 0 : targetConj));
       const window = rates.slice(-3);
       const inflowAvg3h = window.reduce((s, r) => s + r, 0) / window.length;
       const idx = shiftIndex(row.hour);
@@ -120,12 +128,50 @@ export function HourlyRhythmChart({
         hour: hourLabel(SHIFT_HOURS[idx]!),
         rate,
         inflowAvg3h,
+        stock: stockConj,
+        iup,
         codes: fronts.map((n) => ({ front: n, code: row.codes?.[n] ?? "" })).filter((c) => c.code),
       };
     });
 
-    return { data: history, baselineStock: Math.max(0, cumulative) };
-  }, [unit, selected, metaLine, metrics.initialTonnes]);
+    /**
+     * Fase 1 (até 3 horas logadas): média de todas as entradas registradas.
+     * Fase 2 (4h ou mais): média móvel das últimas 3 horas de campo.
+     */
+    const phase: 1 | 2 = rows.length >= 4 ? 2 : 1;
+    const windowConj = phase === 2 ? inflowsConj.slice(-3) : inflowsConj;
+    const inflowAvgConj = windowConj.length
+      ? windowConj.reduce((s, v) => s + v, 0) / windowConj.length
+      : 0;
+    const stepConj = inflowAvgConj - targetConj;
+
+    const lastIdx = history.length ? history[history.length - 1]!.idx : -1;
+    let projStock = stockConj;
+    const forecast: Point[] = [];
+    const blocks: { key: string; value: number }[] = [];
+    for (let i = 1; i <= 4; i += 1) {
+      projStock = Math.max(0, projStock + stepConj);
+      blocks.push({ key: `+${i}h`, value: projStock });
+      const idx = lastIdx + i;
+      if (lastIdx >= 0 && idx <= 23) {
+        forecast.push({
+          idx,
+          hour: hourLabel(SHIFT_HOURS[idx]!),
+          rate: null,
+          inflowAvg3h: history[history.length - 1]?.inflowAvg3h ?? 0,
+          stock: projStock,
+          projected: true,
+          codes: [],
+        });
+      }
+    }
+
+    return {
+      data: [...history, ...forecast].sort((a, b) => a.idx - b.idx),
+      thermo: { blocks, baselineConj: stockConj, inflowAvgConj, targetConj, phase, density },
+    };
+  }, [unit, selected, metaLine]);
+
 
 
   const compareData = useMemo(
