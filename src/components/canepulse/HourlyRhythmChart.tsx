@@ -222,6 +222,9 @@ export function HourlyRhythmChart({
         1,
       );
 
+  const maxStock = Math.max(1, ...data.map((d) => d.stock ?? 0));
+
+
   const axisProps = {
     dataKey: "idx",
     type: "number" as const,
