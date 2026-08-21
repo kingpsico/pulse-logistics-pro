@@ -513,9 +513,17 @@ function RhythmTooltip({
         </>
       ) : null}
 
+      {point.stock != null ? (
+        <p className="num mt-1 text-[11px] font-medium text-chart-3">
+          Estoque de pátio: {fmt(point.stock, 1)} conj.
+          {point.projected ? " (projetado)" : ""}
+          {point.iup ? " · IUP: moagem parada" : ""}
+        </p>
+      ) : null}
       <p className="num mt-0.5 text-[11px] text-muted-foreground">
         Média de entrada móvel 3h: {fmt(point.inflowAvg3h, 1)} t/h
       </p>
+
       {rate == null ? null : below ? (
         <p className="num mt-1 text-[11px] font-medium text-destructive">
           −{fmt(meta - rate, 1)} t/h vs meta
