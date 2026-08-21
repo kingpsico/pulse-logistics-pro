@@ -33,8 +33,13 @@ type Point = {
   hour: string;
   rate: number | null;
   inflowAvg3h: number;
+  /** Estoque de pátio disponível em conjuntos (histórico ou projetado). */
+  stock: number | null;
+  projected?: boolean;
+  iup?: boolean;
   codes: { front: string; code: string }[];
 };
+
 
 
 const SERIES_TOKENS = [
