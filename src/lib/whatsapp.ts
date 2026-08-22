@@ -83,22 +83,62 @@ export function buildWhatsAppReport(
       target: acc.target + (r.unit.dailyTarget || 0),
       projection: acc.projection + r.metrics.projection24 + r.metrics.initialTonnes,
       lost: acc.lost + r.metrics.lostTonnes,
+      bufferTarget: acc.bufferTarget + r.metrics.hourlyTarget * 2,
+      bufferTargetConj:
+        acc.bufferTargetConj + (r.unit.density > 0 ? (r.metrics.hourlyTarget * 2) / r.unit.density : 0),
+      endStock: acc.endStock + Math.max(0, r.metrics.targetDeltaReal),
+      endStockConj:
+        acc.endStockConj +
+        (r.unit.density > 0 ? Math.max(0, r.metrics.targetDeltaReal) / r.unit.density : 0),
     }),
-    { target: 0, projection: 0, lost: 0 },
+    {
+      target: 0,
+      projection: 0,
+      lost: 0,
+      bufferTarget: 0,
+      bufferTargetConj: 0,
+      endStock: 0,
+      endStockConj: 0,
+    },
   );
   const gap = total.projection - total.target;
+  const adh = total.target > 0 ? (total.projection / total.target) * 100 : 0;
+  const bufferGap = total.endStock - total.bufferTarget;
 
   blocks.push(SEP);
   blocks.push(
     [
-      "🏁 *FECHAMENTO CONSOLIDADO*",
-      `• Meta total: ${fmt(total.target)} t`,
-      `• Projeção total: ${fmt(total.projection)} t`,
-      `• Saldo final: ${signed(gap)} t`,
-      `• Perda acumulada: ${fmt(total.lost)} t`,
-      gap < 0 ? "🚨 *ATENÇÃO: fechamento abaixo da meta.*" : "✅ *Meta projetada atendida.*",
+      "🏁 *FECHAMENTO CONSOLIDADO (INDÚSTRIA + PÁTIO)*",
+      "",
+      `• Meta de Moagem Total: ${fmt(total.target)} t`,
+      "",
+      `• Projeção de Moagem 24h: ${fmt(total.projection)} t (${fmt(adh, 1)}% Adh)`,
+      "",
+      `• Saldo de Moagem: ${gap < 0 ? "🔻" : "🔼"} ${signed(gap)} t`,
     ].join("\n"),
   );
+  blocks.push(
+    [
+      "📊 *META DE SEGURANÇA DE PÁTIO (BUFFER 2H)*",
+      "",
+      `• Estoque Alvo de Turno: ${fmt(total.bufferTarget)} t (${fmt(total.bufferTargetConj)} conj.)`,
+      "",
+      `• Estoque Projetado Fim: ${fmt(total.endStock)} t (${fmt(total.endStockConj, 1)} conj.)`,
+      "",
+      `• Saldo de Pulmão: ${bufferGap < 0 ? "🛑" : "✅"} ${signed(bufferGap)} t`,
+    ].join("\n"),
+  );
+  blocks.push(
+    gap < 0 && bufferGap < 0
+      ? "🚨 *STATUS FINAL: Fechamento CRÍTICO. Volume insuficiente para moagem e pátio zerado para a troca de turno.*"
+      : gap < 0
+        ? "⚠️ *STATUS FINAL: Fechamento em ATENÇÃO. Moagem abaixo da meta, porém pulmão de pátio preservado.*"
+        : bufferGap < 0
+          ? "⚠️ *STATUS FINAL: Meta de moagem atendida, mas pulmão de pátio abaixo do buffer de 2h.*"
+          : "✅ *STATUS FINAL: Fechamento ADERENTE. Moagem e pulmão de pátio garantidos para a troca de turno.*",
+  );
+  blocks.push(`🛑 *Perda acumulada:* ${fmt(total.lost)} t`);
+
 
   return blocks.join("\n\n");
 }
